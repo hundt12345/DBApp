@@ -248,12 +248,16 @@ function renderResults(data) {
     ).concat((o.badges || []).map((b) => `<span class="badge">${b}</span>`)).join('');
 
     // Timeline (Modell-Skelett; Live-Daten kommen in den Live-Boxen unten)
-    const itin = itinById[o.itin] || { legs: [], conns: [] };
+    // itin.base (z. B. D verweist auf A) → auf die Basis-Routen-Daten auflösen
+    const itinRaw = itinById[o.itin] || { legs: [], conns: [] };
+    const itin = itinRaw.base ? (itinById[itinRaw.base] || { legs: [], conns: [] }) : itinRaw;
+    const itinLegs = itin.legs || [];
+    const itinConns = itin.conns || [];
     let timeline = `<div class="timeline">
       <div class="step"><strong>${ROUTE_DATA ? ROUTE_DATA.route.originShort : 'Parkgürtel'}</strong> → <strong>${ROUTE_DATA ? ROUTE_DATA.route.hbf : 'Köln Hbf'}</strong>
         <span class="t">S 11 / Klapprad · ${ROUTE_DATA ? dur(ROUTE_DATA.route.firstLeg.s11Min) : '10 min'}</span></div>`;
-    itin.legs.forEach((leg, i) => {
-      const c = itin.conns[i] || 0;
+    itinLegs.forEach((leg, i) => {
+      const c = itinConns[i] || 0;
       timeline += `<div class="step"><strong>${leg.from}</strong> → <strong>${leg.to}</strong>
         <span class="t">${leg.mode} · ${dur(leg.min)}${c ? ' (+ ' + c + ' min U)' : ''}</span>
         ${leg.note ? `<span class="note">${leg.note}</span>` : ''}</div>`;
