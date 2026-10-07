@@ -199,15 +199,29 @@ export function computeQuote(params) {
   const spAb = r2(Math.max(F.sp.ab + scenDelta, F.sp.ab));
   const fernBase = ticketType === 'sp' ? spAb : ssAb;
   const fernName = ticketType === 'sp' ? 'Sparpreis' : 'SuperSparpreis';
-  const ssAvailable = leadDays >= F.ss.minLeadDays && scenario !== 'ausverkauft';
-  const ssReason =
-    leadDays < 0
-      ? 'Reisedatum liegt in der Vergangenheit.'
-      : scenario === 'ausverkauft'
-        ? `${fernName}: als ausverkauft / nicht buchbar markiert (Szenario).`
-        : leadDays < F.ss.minLeadDays
-          ? `${fernName}: Modell-Annahme „ab 14 Tage im Voraus“ – Reisetag ist nur ${leadDays} Tag(e) entfernt.`
-          : null;
+  // WICHTIG: Sparpreise sind für ALLE Reisedaten buchbar – es gibt KEINEN
+  // „14 Tage“-Cut. Bei kurzem Vorlauf ist der ab-Preis real aber oft nicht
+  // verfügbar (Preis steigt). Im Live-Modus entscheidet die echte Preissuche:
+  // Status „empty“ = keine Angebote für diesen Tag gefunden → Option nicht buchbar.
+  const pastDate = leadDays < 0;
+  const scenarioSoldOut = scenario === 'ausverkauft';
+  const shortLead = !pastDate && leadDays < F.ss.minLeadDays;
+  const shortLeadNote = shortLead
+    ? `Kurzfrist (nur ${leadDays} Tag(e) Vorlauf): Der ab-Preis ${fmtEuro(fernBase)} ist in dieser Nähe oft nicht mehr verfügbar – Live-Modus bzw. bahn.de zeigen den echten Preis.`
+    : null;
+  const ssAvailable = !pastDate && !scenarioSoldOut;
+  const ssReason = pastDate
+    ? 'Reisedatum liegt in der Vergangenheit.'
+    : scenarioSoldOut
+      ? `${fernName}: als ausverkauft / nicht buchbar markiert (Szenario).`
+      : null;
+  const liveEmpty = (segKey) => {
+    const s = live && live.ss && live.ss[segKey];
+    return !!(s && s.status === 'empty');
+  };
+  const liveEmptyReason = (segKey) => (liveEmpty(segKey)
+    ? `${fernName}: Live-Preissuche (Stand ${(live.ss[segKey] || {}).asOf}) fand KEIN Sparpreis-Angebot für diesen Tag → nicht buchbar.`
+    : null);
 
   // City-Ticket: nur Sparpreis (nicht SuperSparpreis/Flex unter 100 km); hier gilt es für
   // alle Fernverkehr-Segmente außer Köln→Koblenz (~95 km < 100 km).
@@ -316,8 +330,8 @@ export function computeQuote(params) {
       id: 'sp_mainz_koblenz',
       name: `${fernName} nach Mainz, Ausstieg Koblenz + RP-Ticket + RMV`,
       itin: 'A',
-      available: ssAvailable && rpOk,
-      reason: ssReason || rpReason,
+      available: ssAvailable && rpOk && !liveEmpty('mainz'),
+      reason: ssReason || rpReason || liveEmptyReason('mainz'),
       badges: [city ? 'City-Ticket inkl.' : 'City-Ticket NICHT inkl. (SS)', 'Ausstieg vor Buchungsziel', '9-Uhr-Regel werktags'],
       total: r2(ticketSum + bcSum + rp.price + flSum + llSum),
       minutes: live ? firstMin + IA.conns[0] + fernDur('koblenz', IA.legs[0].min) + restKoblenz() : ROUTE.duration('A'),
@@ -335,6 +349,7 @@ export function computeQuote(params) {
         'Der Sparpreis gilt nur im Fernverkehr – der Rest läuft als Nahverkehr ohne Zugbindung, dafür mit eigenem Ticket (RP + RMV).',
         hasKids ? F.sp.kidsFree : null,
         rpReason ? rpReason + ' (bei Flexibilität: einfach später abfahren.)' : null,
+        shortLeadNote,
         bauNote,
         bikeNote
       ].filter(Boolean)
@@ -359,8 +374,8 @@ export function computeQuote(params) {
       id: 'sp_mainz_direct',
       name: `${fernName} nach Mainz, durch bis Assmannshausen (RMV)`,
       itin: 'B',
-      available: ssAvailable,
-      reason: ssReason,
+      available: ssAvailable && !liveEmpty('mainz'),
+      reason: ssReason || liveEmptyReason('mainz'),
       badges: ['durch bis Assmannshausen', city ? 'City-Ticket inkl.' : 'City-Ticket NICHT inkl. (SS)', 'kein RP-Ticket'],
       total: r2(ticketSum + bcSum + zmbSum + rmvSum + flSum),
       minutes: live ? firstMin + IB.conns[0] + fernDur('mainz', IB.legs[0].min) + restMainz() : ROUTE.duration('B'),
@@ -378,6 +393,7 @@ export function computeQuote(params) {
         liveFernNote('mainz'),
         F.zmb.note,
         hasKids ? F.sp.kidsFree : null,
+        shortLeadNote,
         bauNote,
         bikeNote
       ].filter(Boolean)
@@ -402,8 +418,8 @@ export function computeQuote(params) {
       id: 'sp_frankfurt_detour',
       name: `${fernName} nach Frankfurt (Neubaustrecke) + RE 21 nach Rüdesheim`,
       itin: 'C',
-      available: ssAvailable,
-      reason: ssReason,
+      available: ssAvailable && !liveEmpty('frankfurt'),
+      reason: ssReason || liveEmptyReason('frankfurt'),
       badges: ['längerer Umweg', city ? 'City-Ticket inkl.' : 'City-Ticket NICHT inkl. (SS)', 'kein RP-Ticket'],
       total: r2(ticketSum + bcSum + vgnSum + rmvSum + flSum),
       minutes: live ? firstMin + IC.conns[0] + fernDur('frankfurt', IC.legs[0].min) + restFrankfurt() : ROUTE.duration('C'),
@@ -420,6 +436,7 @@ export function computeQuote(params) {
         city ? 'City-Ticket im Sparpreis (>100 km) inklusive: Parkgürtel→Köln Hbf gratis.' : 'SuperSparpreis hat KEIN City-Ticket → Köln-Kurzstrecke 2,90 €.',
         liveFernNote('frankfurt'),
         hasKids ? F.sp.kidsFree : null,
+        shortLeadNote,
         bauNote,
         bikeNote
       ].filter(Boolean)
@@ -638,6 +655,7 @@ export function computeQuote(params) {
     ssAb,
     spAb,
     ssAvailable,
+    shortLead,
     leadDays,
     bau,
     people: people.length,
@@ -661,7 +679,7 @@ export const ASSUMPTIONS = [
   { t: 'Ziel-Interpretation', s: 'Assmannshausen bei Rüdesheim (Hessen, RMV) – der „kleine Teil in Hessen“. Nächstgelegener Halt: „Assmannshausen“ an der rechten Rheinstrecke (rechtsrheinisch, 5 min ab Rüdesheim) + Anlegestelle „Assmannshausen KD“.' },
   { t: 'KERN-ERKENNTNIS: kein Fernverkehr nach Rüdesheim', s: 'Auf der rechten Rheinstrecke (Köln–Neuwied–Koblenz–Bingen–Rüdesheim–Assmannshausen) fährt NUR Regionalverkehr (RE 97 „Rheintalbahn“ u. a.) – KEINE ICE/IC, daher KEIN Sparpreis direkt nach Rüdesheim. Fernverkehr gibt es linksrheinisch (Köln–Bonn–Koblenz–Mainz, mind. stündlich ICE) und über die Neubaustrecke nach Frankfurt Hbf (~1 h 05). Deshalb buchen die Sparpreis-Optionen nach Mainz (Ausstieg Koblenz), nach Mainz durch oder nach Frankfurt (Umweg).' },
   { t: 'City-Ticket (DB)', s: 'City-Ticket im Sparpreis/Flexpreis automatisch inklusive bei >100 km Reiseweite (Köln nimmt teil) → Parkgürtel→Köln Hbf gratis am Geltungstag (einmalig, wie Einzelfahrschein). Im SuperSparpreis NICHT enthalten → dann gilt: Köln-Kurzstrecke 2,90 € (Parkgürtel→Hbf = 2 Halte, Kind 1,45 €) als günstigstes Stadt-Ticket. VRS-Abonnement: 0 €.' },
-  { t: 'SuperSparpreis / Sparpreis', s: '2026: SuperSparpreis ab 17,90 € (Zugbindung, kein Storno, kein City-Ticket), Sparpreis ab 21,90 € (Zugbindung, Storno gegen Gebühr, City-Ticket >100 km). Modell: ab 14 Tage im Voraus buchbar. Kinder bis 14 frei (Alter bei Buchung angeben, max. 4 je Ticket, Begleitung 15+). BahnCard 25 = 25 % Rabatt.' },
+  { t: 'SuperSparpreis / Sparpreis', s: '2026: SuperSparpreis ab 17,99 € (Zugbindung, kein Storno, kein City-Ticket), Sparpreis ab 21,99 € (Zugbindung, Storno gegen Gebühr, City-Ticket >100 km). Für ALLE Reisedaten buchbar – bei kurzem Vorlauf ist der ab-Preis i. d. R. nicht mehr verfügbar (Preis steigt); Live-Modus zeigt den echten Preis/Buchungsstatus. Kinder bis 14 frei (Alter bei Buchung angeben, max. 4 je Ticket, Begleitung 15+). BahnCard 25 = 25 % Rabatt.' },
   { t: 'Flexpreis (DB-Tarif)', s: 'Köln→Koblenz: 60,00 € Modellwert (2. Kl.) – vor Buchung auf bahn.de prüfen. Freie Zugwahl, stornierbar, City-Ticket nur >100 km (Köln→Koblenz ~95 km → KEIN City-Ticket).' },
   { t: 'Rheinland-Pfalz-Ticket', s: '30 € + 10 € je weitere Person (max. 5), Kinder unter 14 frei. Mo–Fr erst ab 9:00 Uhr, Sa/So ganztägig. Gilt ab JEDEM Bahnhof in RP (auch mitten in der Strecke) – nicht in Köln (NRW), nicht in Hessen.' },
   { t: '24hTicket NRW', s: '39,80 € Single / 59,80 € bis 5 Personen (Stand 2026), 24 h ab Entwertung, keine 9-Uhr-Regel. Gilt auf ALLEN Nahverkehrsmitteln in NRW – der erste Teil Parkgürtel→Köln Hbf ist damit ENTHALTEN (wird nicht extra berechnet).' },
@@ -673,6 +691,6 @@ export const ASSUMPTIONS = [
   { t: 'Klapprad', s: 'Gefaltetes Klapprad in Nah- und Fernverkehr frei ohne Reservierung. Im Modell ersetzt es den ersten Teil (~5,5 km, 25 min) und den letzten Abschnitt (entlang des Rheins).' },
   { t: 'BAUEN 2026 (Betriebslage)', s: 'Rechte Rheinstrecke (Wiesbaden–Rüdesheim–Koblenz) ist 10.07.–11.12.2026 vollgesperrt (RMV-Fahrplan 2026, RB10 → Bus-Ersatz) → alle Abschnitte rechts des Rheins inkl. Assmannshausen deutlich länger. Tickets bleiben dieselben.' },
   { t: 'Fahrzeiten (Modell)', s: 'ICE Köln→Koblenz links ~1 h 25, Köln→Mainz links ~1 h 45, Köln→Frankfurt (SFS) ~1 h 05, RE 21 Frankfurt→Rüdesheim ~1 h 15, RE links Köln→Koblenz ~1 h 30, RE 97 rechts Köln→Rüdesheim ~2 h (vor Bau), Umsteigepuffer 15–20 min.' },
-  { t: 'Live-Daten', s: 'Live-Modus ersetzt: Sparpreis-Ab-Preise durch reale DB-Preissuche-Angebote (ps.bahn.de, 24-h-Fenster = „Günstigster Tarif des Tages“) inkl. konkreter Züge mit Zugbindungs-Info; Modell-Fahrzeiten durch tatsächliche DB-Verbindungen (DB-API, mit Key). Fallback pro Abschnitt auf Modell (Status im UI).' },
-  { t: 'Quellen (Auszug)', s: 'bahn.de (Sparpreise 2026: SS 17,90/SP 21,90, City-Ticket-Regeln), RMV (Fahrplan 2026: Vollsperrung rechter Rheinstrecke, Einzelfahrschein 2026), kvb.koeln (Rheinland-Tarif 2026), bingen-ruedesheimer.de/roesslerlinie.de (Schifffahrt 2026), DB-Station-Datenbestand (Station-IDs). Details: docs/TARIFE-2026.md + docs/LIVE-DATEN.md.' }
+  { t: 'Live-Daten', s: 'Live-Modus ersetzt: Sparpreis-Ab-Preise durch reale DB-Preissuche-Angebote (ps.bahn.de, 24-h-Fenster = „Günstigster Tarif des Tages“) inkl. konkreter Züge mit Zugbindungs-Info; Modell-Fahrzeiten durch tatsächliche DB-Verbindungen (DB-API, mit Key). ps.bahn.de blockt direkte Browser-Calls (CORS) → automatischer Fallback über öffentliche CORS-Proxys (corsproxy.io/allorigins, UI zeigt die genutzte Quelle). „Kein Angebot für den Tag“ (empty) = Option nicht buchbar; Quelle tot = Modell-Fallback (Status im UI).' },
+  { t: 'Quellen (Auszug)', s: 'bahn.de (Sparpreise 2026: SS ab 17,99/SP ab 21,99, City-Ticket-Regeln), RMV (Fahrplan 2026: Vollsperrung rechter Rheinstrecke, Einzelfahrschein 2026), kvb.koeln (Rheinland-Tarif 2026), bingen-ruedesheimer.de/roesslerlinie.de (Schifffahrt 2026), DB-Station-Datenbestand (Station-IDs). Details: docs/TARIFE-2026.md + docs/LIVE-DATEN.md.' }
 ];

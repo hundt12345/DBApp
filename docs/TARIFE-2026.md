@@ -30,11 +30,11 @@ Rüdesheim→Assmannshausen 5 min).
 
 | Tarif | Preis | Regel | Quelle |
 |---|---|---|---|
-| **SuperSparpreis** (2. Kl.) | **ab 17,90 €** (SSEE 18,90 €) | Nur ICE/IC/EC; dynamischer Preis; **kein** Storno/Umtausch; **KEIN City-Ticket** | [jugendverbraucherdialog.de (05/2026, zitiert bahn.de 04/2026)](https://jugendverbraucherdialog.de/), [fr.de (DB-Presserelais, Dauerstruktur „kein City-Ticket beim SS“)](https://www.fr.de/) |
-| **Sparpreis** (2. Kl.) | **ab 21,90 €** (SPE 22,90 €) | Zugbindung, Storno gegen Gebühr; **City-Ticket >100 km inklusive** | dito |
+| **SuperSparpreis** (2. Kl.) | **ab 17,99 €** | Nur ICE/IC/EC; dynamischer Preis; **kein** Storno/Umtausch; **KEIN City-Ticket** | [dbfahrplanauskunft (2026)](https://www.dbfahrplanauskunft.com/de/artikel/sparpreise-der-deutschen-bahn.html), [bahngebote.de (03/2026)](https://bahngebote.de/super-sparpreis-aktion/), [rbb24 (DB, 10/2024: Einstiegspreise stabil 17,99/21,99)](https://www.rbb24.de/wirtschaft/beitrag/2024/10/deutsche-bahn-fernverkehr-preiserhoehung-flexpreis-bahncard-100.html) |
+| **Sparpreis** (2. Kl.) | **ab 21,99 €** | Zugbindung, Storno gegen Gebühr; **City-Ticket >100 km inklusive** | dito |
 | Kinder 6–14 | **frei** (Alter bei Buchung angeben, max. 4 je Ticket, Begleitung 15+) | unter 6 frei | [bahn.de SS-Gruppe](https://www.bahn.de/angebot/sparpreis-flexpreis/super-sparpreis-gruppe) |
 | BahnCard 25 | 25 % auf SS/SP/Flex | kein Rabatt auf Verbund/Länder-Tickets | [bahn.de](https://www.bahn.de/angebot/bahncard/vergleich) |
-| Vorlauf | **≥ 14 Tage** (Modellannahme) | Last-Minute-Aktionen kurzfristig, nicht planbar | [bahn.de](https://www.bahn.de/angebot/sparpreis-flexpreis/super-sparpreis-gruppe) |
+| Vorlauf | **keine harte Grenze** – buchbar für alle Daten | Bei kurzem Vorlauf (Modell: <14 Tage) ist der **ab-Preis i. d. R. nicht** verfügbar (Preis steigt); Live-Modus zeigt den echten Status („kein Angebot“ wird ehrlich als nicht buchbar gemeldet) | [bahn.de](https://www.bahn.de/angebot/sparpreis-flexpreis/super-sparpreis-gruppe) |
 | **Flexpreis Köln→Koblenz** (2. Kl.) | **60,00 € (MODELLWERT)** | Kind 6–14: 50 %; BC25: 25 %; freie Zugwahl; City-Ticket nur >100 km → **hier KEINES** (~95 km) | – (Modell, auf bahn.de prüfen) |
 | Zugbindung | Gilt nur im Fernverkehr; Nahverkehr-Anteil mit eigenem Ticket → dort keine Zugbindung | „längere Strecke buchen, früher aussteigen“ zulässig (Ticket nach Mainz, Ausstieg Koblenz) | [bahn.de SS-Gruppe FAQ](https://www.bahn.de/angebot/sparpreis-flexpreis/super-sparpreis-gruppe) |
 

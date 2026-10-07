@@ -113,16 +113,17 @@ async function fetchLive() {
     liveMode: state.liveMode,
     dbKey: state.dbKey
   };
-  const timeout = new Promise((res) => setTimeout(() => res(null), 14000));
+  const timeout = new Promise((res) => setTimeout(() => res(null), 32000));
   const job = window.DBAppLive.collectLive(p);
   const live = await Promise.race([job, timeout]);
+  const viaTxt = live && live.via && live.via.length ? ' · über ' + live.via.join('/') : '';
   if (!live) {
     liveStatus('Live nicht erreichbar (Zeitüberschreitung) – es gelten die Modell-Preise.', 'err');
     return null;
   }
-  if (live.status === 'live') liveStatus(`✔ LIVE-DATEN (${live.asOf}): echte DB-Sparpreis-Angebote & Verbindungen.`, 'ok');
-  else if (live.status === 'partial') liveStatus(`⚠ TEILWEISE LIVE (${live.asOf}): ${(live.errors || []).slice(0, 2).join(' · ')} – fehlende Abschnitte als Modell.`, 'warn');
-  else liveStatus('✖ LIVE NICHT ERREICHBAR: ' + ((live.errors || []).slice(0, 1).join(' · ') || 'unbekannter Fehler') + ' – Modell-Preise angezeigt. Tipp: DB-API-Key oben setzen oder später erneut versuchen.', 'err');
+  if (live.status === 'live') liveStatus(`✔ LIVE-DATEN (Stand ${live.asOf}${viaTxt}): echte DB-Sparpreis-Angebote & Verbindungen.`, 'ok');
+  else if (live.status === 'partial') liveStatus(`⚠ TEILWEISE LIVE (Stand ${live.asOf}${viaTxt}): ${(live.errors || []).slice(0, 2).join(' · ')} – fehlende Abschnitte als Modell.`, 'warn');
+  else liveStatus('✖ LIVE NICHT ERREICHBAR (direkt + CORS-Proxys): ' + ((live.errors || []).slice(0, 1).join(' · ') || 'unbekannter Fehler') + ' – Modell-Preise angezeigt. Tipp: Seite neu laden / später erneut versuchen.', 'err');
   return live;
 }
 
@@ -225,10 +226,11 @@ function renderResults(data) {
     ? ` · <strong>Live:</strong> ${data.meta.live.status === 'live' ? 'alle Abschnitte live' : data.meta.live.status === 'partial' ? 'teilweise live (Rest Modell)' : 'nicht verfügbar'} (Stand ${data.meta.live.asOf})`
     : '';
   const bauMeta = data.meta.bau ? ' · <strong>⚠️ Bau: rechte Rheinstrecke gesperrt (Bus-Ersatz)</strong>' : '';
+  const shortMeta = data.meta.shortLead && !data.meta.live ? ' · <em>kurzfristig – ab-Preis nicht garantiert</em>' : '';
   head.innerHTML = `
     <strong>${data.meta.weekday}, ${data.meta.date}</strong> · Modell-Abfahrt ${data.meta.depart} ·
     ${data.meta.people} Reisende · ${data.meta.fernName}:
-    ${data.meta.ssAvailable ? `ab ${eur(data.meta.ticketType === 'sp' ? data.meta.spAb : data.meta.ssAb)}` : 'nicht verfügbar'}${liveMeta}${bauMeta} ·
+    ${data.meta.ssAvailable ? `ab ${eur(data.meta.ticketType === 'sp' ? data.meta.spAb : data.meta.ssAb)}` : 'nicht verfügbar'}${shortMeta}${liveMeta}${bauMeta} ·
     Strecke: ${data.meta.origin} → ${data.meta.destination}
   `;
   box.appendChild(head);

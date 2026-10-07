@@ -66,8 +66,38 @@ Antwort (vereinfacht):
 - **Kontrakt-Nachweis:** Open-Source-Client [`juliuste/db-prices`](https://github.com/juliuste/db-prices)
   (npm, 2022) benutzt exakt dieses Endpoint; auch [`tpt-research/DB-SparpreisProxy`](https://github.com/tpt-research/DB-SparpreisProxy).
 - **Grenzen:** unoffiziell (keine SLA/ToS-Garantie), Client-String `v`/`os` könnten
-  irgendwann relevant werden, CORS *kann* in manchen Browsern blockiert sein → dann
-  DB-API-Key oder Modell-Modus. Für Produktion: bei der DB um Erlaubnis fragen.
+  irgendwann relevant werden. Für Produktion: bei der DB um Erlaubnis fragen.
+
+### CORS-Problem & Proxy-Chain (wichtig!)
+
+`ps.bahn.de` sendet **keine CORS-Header** → ein direkter `fetch` aus dem Browser wird
+blockiert („Failed to fetch“) und die App würde stumm auf Modellwerte zurückfallen.
+Deshalb versucht `live.js → fetchSmart()` pro Request:
+
+1. **direkt** (ohne Umweg über Dritte – falls die DB je CORS erlaubt, gewinnt dieser),
+2. danach **parallel** die öffentlichen CORS-Proxys:
+   - `https://corsproxy.io/?url=<encoded>` (GET & POST),
+   - `https://api.allorigins.win/raw?url=<encoded>` (nur GET).
+
+Der erste erfolgreiche Call gewinnt; jeder Segmenteintrag trägt sein `via`
+(`direkt` / `corsproxy.io` / `allorigins.win`), und `live.via[]` listet die
+tatsächlich genutzten Quellen – das UI zeigt das im Status („✔ LIVE-DATEN … über
+corsproxy.io“). Sind **alle** Quellen tot → Segment-Status `error` → Modell-Fallback.
+
+Honesty-Hinweis: Die Preise laufen dabei über einen öffentlichen Proxy (keine
+persönlichen Daten, nur Strecke/Datum). Für Produktion: eigener Reverse-Proxy.
+
+### Segment-Status (Engine-Semantik)
+
+| Status | Bedeutung | Engine-Verhalten |
+|---|---|---|
+| `ok` | Quelle lieferte Angebote/Verbindungen | Live-Preis/-Fahrzeit ersetzt Modell |
+| `empty` | Quelle lieferte **keine** Angebote für diesen Tag | **Fernverkehr-Option wird NICHT gebucht** („kein Sparpreis-Angebot für diesen Tag“) – statt Modell zu raten |
+| `error` | keine Quelle erreichbar (direkt + Proxys) | Modell-Fallback für dieses Segment |
+| `skipped` | Segment aktiviert nicht (NV ohne DB-API-Key) | Modell |
+
+Wichtig: Es gibt **keine harte Vorlaufzeit** – Sparpreise sind für alle Daten
+buchbar; `empty` ist die ehrliche Antwort „heute/für diesen Tag nicht verfügbar“.
 
 ### 2) DB Navigator API (offiziell, für Nahverkehrs-Verbindungen) – Key nötig
 - Registrieren: https://api.bahn.de (kostenlos, Client-ID + Client-Secret).

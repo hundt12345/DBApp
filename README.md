@@ -97,7 +97,9 @@ test/               Engine- + Parser-Smoke-Tests
 - Tarifstand: **Oktober 2026** (Quellen in `docs/TARIFE-2026.md`).
 - **SuperSparpreis/Sparpreis/Flexpreis sind dynamisch** – im UI werden Ticket-Typ
   (SS ohne City-Ticket / SP mit City-Ticket) und Szenario gewählt
-  (ab-Preise SS 17,90 € / SP 21,90 €, +10 €, +25 €, ausverkauft). Vor der Buchung: bahn.de.
+  (ab-Preise SS 17,99 € / SP 21,99 €, +10 €, +25 €, ausverkauft). Vor der Buchung: bahn.de.
+  Für kurze Vorlaufszeiten gelten die ab-Preise i. d. R. nicht mehr – der Live-Modus
+  holt die echten Angebote (und meldet „kein Angebot“ ehrlich statt zu raten).
 - **City-Ticket-Logik:** beim Sparpreis/Flexpreis (>100 km) ist der erste Teil
   Parkgürtel→Köln Hbf **enthalten**; beim SuperSparpreis gilt Köln-Kurzstrecke 2,90 €;
   beim 3-Verbund/NRW-Ticket & DtT ist der erste Teil enthalten (nie Doppelabrechnung).
@@ -106,9 +108,11 @@ test/               Engine- + Parser-Smoke-Tests
   Ohne Live-Modus gelten die markierten **Modellwerte**: Flexpreis
   Köln→Koblenz (60 €), RMV-Wabenanzahl je Abschnitt, Fahrtzeiten
   (typische Fahrpläne). Der Zug ist dann **nicht** verbindlich benannt.
-- 9-Uhr-Regel, Vorlaufzeit (SS/SP ≥ 14 Tage), Kinderregeln, die
-  Hessen-Pocket-Logik (RP-Ticket endet in Lorch/Lahnstein) und die
-  **Vollsperrung der rechten Rheinstrecke (Bau 2026)** sind modelliert.
+- 9-Uhr-Regel, Kinderregeln, die Hessen-Pocket-Logik (RP-Ticket endet in
+  Lorch/Lahnstein) und die **Vollsperrung der rechten Rheinstrecke (Bau 2026)**
+  sind modelliert. Es gibt **keine harte Vorlaufzeit** – Sparpreise sind für alle
+  Daten buchbar; bei kurzem Vorlauf wird im UI gewarnt, dass der ab-Preis
+  real oft nicht mehr verfügbar ist.
 
 ## Roadmap
 

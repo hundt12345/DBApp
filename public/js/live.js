@@ -1,16 +1,19 @@
 /* DBApp – Live-Daten-Layer (läuft IM BROWSER: kann bahn.de direkt erreichen)
  *
  * Quellen:
- *  1) ps.bahn.de/preissuche  – DB-Preis-Suche (Sparpreis-/SuperSparpreis-/Flex-Angebote
+ *  1) ps.bahn.de/preissuche  – DB-Preis-Suche (Sparpreis-/SuperSparpreis-Angebote
  *     + konkrete Fernzüge) für ein Segment, 24 h-Fenster ab gewählter Zeit.
  *     UNOFFIZIELLES DB-Endpoint (Kontrakt dokumentiert u. a. im Open-Source-Projekt
- *     juliuste/db-prices). Kein API-Key nötig. Kann sich ändern / CORS-Blockade möglich
- *     -> dann: DB-API-Key unten oder Modell-Modus.
- *  2) api.bahn.de (DB Navigator API) – offizielle API für Verbindungen (Nahverkehr)
- *     mit Live-Zügen. Benötigt kostenlosen Client-ID/Secret (api.bahn.de).
+ *     juliuste/db-prices). Kein API-Key nötig.
+ *     WICHTIG: ps.bahn.de sendet KEINE CORS-Header → der direkte Browser-Call
+ *     scheitert. Deshalb: 1. Versuch direkt (falls es je klappt), danach
+ *     öffentliche CORS-Proxy-Chain (corsproxy.io, allorigins.win) parallel.
+ *     Jeder erfolgreiche Call meldet sein `via`-Herkunftsnetz im Status.
+ *  2) api.bahn.de (DB Navigator API) – offizielle API für Verbindungen
+ *     (Nahverkehr) mit Live-Zügen. Benötigt kostenlosen Client-ID/Secret.
  *
  * Ergebnis: normalisiertes Objekt für den Engine-Quote:
- *   { status, asOf, errors:[], ss: {segKey: seg}, nv: {nvKey: conn} }
+ *   { status, asOf, via:[], errors:[], ss: {segKey: seg}, nv: {nvKey: conn} }
  */
 (function (global) {
   'use strict';
@@ -19,14 +22,26 @@
   const DB_TOKEN_URL = 'https://api.bahn.de/api/oauth2/token';
   const DB_CONN_URL = 'https://api.bahn.de/api/v1/connections';
   const CACHE_TTL_MS = 10 * 60 * 1000;
-  const FETCH_TIMEOUT_MS = 10000;
+  const FETCH_TIMEOUT_MS = 9000;
   const cache = new Map();
+
+  // CORS-Proxy-Chain (nur öffentliche, keylose Proxys). `post`: ob der Proxy
+  // POST/Body weiterleitet (corsproxy.io ja, allorigins nur GET).
+  const PROXIES = [
+    { name: 'direkt', get: (u) => u, post: false },
+    { name: 'corsproxy.io', get: (u) => 'https://corsproxy.io/?url=' + encodeURIComponent(u), post: true },
+    { name: 'allorigins.win', get: (u) => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u), post: false }
+  ];
 
   // ---------- Utilities ----------
 
-  const eur = (x) => '€ ' + x.toFixed(2).replace('.', ',');
+  function msg(e) {
+    if (!e) return 'unbekannt';
+    if (e.name === 'AbortError') return 'Zeitüberschreitung';
+    return String(e.message || e).slice(0, 160);
+  }
 
-  async function fetchJson(url, opts, timeoutMs) {
+  async function fetchOnce(url, opts, timeoutMs) {
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), timeoutMs || FETCH_TIMEOUT_MS);
     try {
@@ -36,6 +51,34 @@
     } finally {
       clearTimeout(t);
     }
+  }
+
+  /**
+   * Fetch mit Fallback-Chain: zuerst direkt (schnellste Route, kein Dritter),
+   * danach die CORS-Proxys PARALLEL – der erste erfolgreiche Call gewinnt.
+   * Liefert { body, via } oder wirft (mit allen Einzel-Fehlern in message).
+   */
+  async function fetchSmart(url, opts, timeoutMs) {
+    const isGet = !opts || !opts.method || opts.method.toUpperCase() === 'GET';
+    const errors = [];
+    try {
+      const body = await fetchOnce(url, opts, timeoutMs);
+      return { body, via: 'direkt' };
+    } catch (e) {
+      errors.push('direkt: ' + msg(e));
+    }
+    const cands = PROXIES.filter((p) => p.name !== 'direkt' && (isGet || p.post));
+    const settled = await Promise.allSettled(
+      cands.map((p) => fetchOnce(p.get(url), opts, timeoutMs))
+    );
+    for (let i = 0; i < settled.length; i++) {
+      const r = settled[i];
+      if (r.status === 'fulfilled') return { body: r.value, via: cands[i].name };
+      errors.push(cands[i].name + ': ' + msg(r.reason));
+    }
+    const err = new Error('Alle Quellen nicht erreichbar – ' + errors.join(' | '));
+    err.chain = errors;
+    throw err;
   }
 
   // Zeit -> Minuten seit Mitternacht (Zonenvollstand: Europe/Berlin).
@@ -76,9 +119,7 @@
 
   // ---------- 1) ps.bahn.de Preissuche ----------
 
-  const pad2 = (n) => String(n).padStart(2, '0');
-
-  function preissucheQuery(seg, dateStr, timeStr, stations) {
+  function preissucheUrl(seg, dateStr, timeStr, stations) {
     const data = {
       s: stations[seg.from],
       d: stations[seg.to],
@@ -97,7 +138,7 @@
       os: 'iOS_9.3.1'
     };
     const q = new URLSearchParams({ lang: 'de', service: 'pscangebotsuche', data: JSON.stringify(data) });
-    return fetchJson(PS_URL + '?' + q.toString(), { headers: { accept: 'application/json' } });
+    return PS_URL + '?' + q.toString();
   }
 
   // Robuster Parser für die ps.bahn.de-Antwort (Feldnamen können sich je API-Version ändern).
@@ -127,13 +168,10 @@
 
     const journeys = Object.values(connsRaw).map((c) => {
       const trains = (c.trains || c.legs || []).map((t) => {
-        // Feldnamen defensiv abdecken: dep/arr als String/Number/Objekt {m|dateTime|time}
-        const depMin = toMinutes(t.dep != null && typeof t.dep === 'object' ? (t.dep.m != null ? t.dep.m : (t.dep.dateTime || t.dep.time)) : t.dep)
-          != null ? toMinutes(t.dep != null && typeof t.dep === 'object' ? (t.dep.m != null ? t.dep.m : (t.dep.dateTime || t.dep.time)) : t.dep)
-          : toMinutes(t.m);
-        const arrMin = toMinutes(t.arr != null && typeof t.arr === 'object' ? (t.arr.m != null ? t.arr.m : (t.arr.dateTime || t.arr.time)) : t.arr)
-          != null ? toMinutes(t.arr != null && typeof t.arr === 'object' ? (t.arr.m != null ? t.arr.m : (t.arr.dateTime || t.arr.time)) : t.arr)
-          : null;
+        const rawDep = t.dep != null && typeof t.dep === 'object' ? (t.dep.m != null ? t.dep.m : (t.dep.dateTime || t.dep.time)) : t.dep;
+        const rawArr = t.arr != null && typeof t.arr === 'object' ? (t.arr.m != null ? t.arr.m : (t.arr.dateTime || t.arr.time)) : t.arr;
+        const depMin = toMinutes(rawDep) != null ? toMinutes(rawDep) : toMinutes(t.m);
+        const arrMin = toMinutes(rawArr);
         return {
           from: t.sn || (t.origin && t.origin.name) || '',
           to: t.dn || (t.destination && t.destination.name) || '',
@@ -185,13 +223,14 @@
     if (hit && Date.now() - hit.t < CACHE_TTL_MS) return hit.v;
     let v;
     try {
-      const body = await preissucheQuery(seg, dateStr, timeStr, stations);
+      const url = preissucheUrl(seg, dateStr, timeStr, stations);
+      const { body, via } = await fetchSmart(url, { headers: { accept: 'application/json' } });
       const parsed = parsePreissuche(body);
       v = parsed
-        ? { status: 'ok', asOf: nowHM(), data: parsed }
-        : { status: 'empty', asOf: nowHM(), error: 'Keine Verbindungen/Angebote im Fenster gefunden (Endpoint-Antwort unerwartet)' };
+        ? { status: 'ok', via, asOf: nowHM(), data: parsed }
+        : { status: 'empty', via, asOf: nowHM(), error: 'Die Live-Preissuche lieferte keine Sparpreis-Angebote für diesen Tag (Antwort ohne Verbindungen).' };
     } catch (e) {
-      v = { status: 'error', asOf: nowHM(), error: e.name === 'AbortError' ? 'Zeitüberschreitung (10 s)' : String(e.message || e) };
+      v = { status: 'error', asOf: nowHM(), error: msg(e) };
     }
     cache.set(key, { t: Date.now(), v });
     return v;
@@ -204,7 +243,7 @@
   async function dbTokenFor(clientId, clientSecret) {
     if (dbToken && Date.now() < dbTokenExp) return dbToken;
     const body = new URLSearchParams({ grant_type: 'client_credentials' });
-    const res = await fetchJson(DB_TOKEN_URL, {
+    const { body: res } = await fetchSmart(DB_TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString()
@@ -231,12 +270,12 @@
         maxJourneys: '3',
         mode: '1' // nur Regionalzüge (Nahverkehr)
       });
-      const body = await fetchJson(DB_CONN_URL + '?' + q.toString(), {
+      const { body, via } = await fetchSmart(DB_CONN_URL + '?' + q.toString(), {
         headers: { Authorization: 'Bearer ' + token, Accept: 'application/json' }
       });
-      v = { status: 'ok', asOf: nowHM(), data: parseConnections(body) };
+      v = { status: 'ok', via, asOf: nowHM(), data: parseConnections(body) };
     } catch (e) {
-      v = { status: 'error', asOf: nowHM(), error: e.name === 'AbortError' ? 'Zeitüberschreitung (10 s)' : String(e.message || e) };
+      v = { status: 'error', asOf: nowHM(), error: msg(e) };
     }
     cache.set(key, { t: Date.now(), v });
     return v;
@@ -291,18 +330,26 @@
 
   /**
    * params: { date:'YYYY-MM-DD', window, stations, liveSegments, departures, liveMode, dbKey }
-   * -> { status, asOf, errors, ss: {segKey: segResult}, nv: {nvKey: connResult} }
+   * -> { status, asOf, via:[], errors, ss: {segKey: segResult}, nv: {nvKey: connResult} }
+   *
+   * Status je Segment:
+   *  ok      – Quelle antwortete mit Daten
+   *  empty   – Quelle antwortete, aber KEIN Angebot/keine Verbindung für diesen Tag
+   *  error   – alle Quellen (direkt + Proxys) nicht erreichbar → Engine nutzt Modell
+   *  skipped – Segment aktiviert nicht (z. B. NV ohne DB-API-Key)
    */
   async function collectLive(params) {
-    const out = { status: 'live', asOf: nowHM(), errors: [], ss: {}, nv: {} };
+    const out = { status: 'live', asOf: nowHM(), via: [], errors: [], ss: {}, nv: {} };
     if (params.liveMode === 'off') { out.status = 'off'; return out; }
     const dateStr = fmtDateDE(params.date);
     const timeStr = (params.departures && params.departures[params.window]) || '11:00';
+    const vias = new Set();
     const jobs = [];
     for (const segKey of Object.keys(params.liveSegments.ss)) {
       const seg = params.liveSegments.ss[segKey];
       jobs.push(liveSparpreis(seg, dateStr, timeStr, params.stations).then((r) => {
         out.ss[segKey] = r;
+        if (r.via) vias.add(r.via);
         if (r.status !== 'ok') out.errors.push('Sparpreis ' + segKey + ': ' + (r.error || r.status));
       }));
     }
@@ -312,14 +359,18 @@
       const seg = params.liveSegments.nv[nvKey];
       jobs.push(dbConnections(seg, dateStr, timeStr, params.stations, params.dbKey).then((r) => {
         out.nv[nvKey] = r;
+        if (r.via) vias.add(r.via);
         if (r.status !== 'ok') out.errors.push('Verbindungen ' + nvKey + ': ' + (r.error || r.status));
       }));
     }
     await Promise.allSettled(jobs);
+    out.via = Array.from(vias);
+    const ssTotal = Object.keys(out.ss).length;
+    const nvTotal = Object.keys(out.nv).length;
     const okCount = Object.values(out.ss).filter((s) => s.status === 'ok').length;
     const nvOk = Object.values(out.nv).filter((s) => s.status === 'ok').length;
     if (okCount === 0 && nvOk === 0) out.status = 'error';
-    else if (okCount < 3 || (useNv && nvOk < 4)) out.status = 'partial';
+    else if (okCount < ssTotal || (useNv && nvOk < nvTotal)) out.status = 'partial';
     else out.status = 'live';
     return out;
   }
@@ -327,6 +378,6 @@
   global.DBAppLive = {
     collectLive,
     fmtDur, fmtMin,
-    _test: { parsePreissuche, parseConnections, toMinutes }
+    _test: { parsePreissuche, parseConnections, toMinutes, fetchSmart, PROXIES }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

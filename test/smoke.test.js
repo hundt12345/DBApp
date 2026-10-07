@@ -29,14 +29,14 @@ function opt(result, id) {
   return result.options.find((o) => o.id === id);
 }
 
-test('Standardfamilie (2 Erw. + Kind 8), Samstag, SuperSparpreis: Frankfurt-Umweg ist günstigste Option (73,05 €)', () => {
+test('Standardfamilie (2 Erw. + Kind 8), Samstag, SuperSparpreis: Frankfurt-Umweg ist günstigste Option (73,23 €)', () => {
   const r = computeQuote({ ...SAT, people: P2 });
   // 2×17,90 SS + 7,25 Kurzstrecke (kein City-Ticket beim SS) + 20,00 VGN+RMV + 10,00 RMV
   assert.equal(best(r).id, 'sp_frankfurt_detour');
-  assert.equal(best(r).total, 73.05);
+  assert.equal(best(r).total, 73.23);
   // Reihenfolge der restlichen verfügbaren Optionen
-  assert.equal(opt(r, 'sp_mainz_direct').total, 82.55); // 35,80 + 7,25 + 9,50 ZMB + 30,00 RMV
-  assert.equal(opt(r, 'sp_mainz_koblenz').total, 103.05); // 35,80 + 7,25 + 40 RP + 20,00 RMV
+  assert.equal(opt(r, 'sp_mainz_direct').total, 82.73); // 35,98 + 7,25 + 9,50 ZMB + 30,00 RMV
+  assert.equal(opt(r, 'sp_mainz_koblenz').total, 103.23); // 35,98 + 7,25 + 40 RP + 20,00 RMV
   assert.equal(opt(r, 'nv_rechtsrheinisch').total, 109.8); // 59,80 NRW + 40 RP + 10,00 RMV (1. Teil enthalten)
   assert.equal(opt(r, 'nv_linksrheinisch').total, 119.8); // 59,80 NRW + 40 RP + 20,00 RMV (1. Teil enthalten)
   assert.equal(opt(r, 'flex_koblenz').total, 217.25); // 60+60+30 (Kind 50 %) + 7,25 + 40 RP + 20,00 RMV
@@ -46,11 +46,11 @@ test('Standardfamilie (2 Erw. + Kind 8), Samstag, SuperSparpreis: Frankfurt-Umwe
   assert.equal(e.rows.find((x) => /ENTHALTEN/.test(x.label)).amount, 0);
 });
 
-test('Sparpreis-Typ: City-Ticket macht ersten Teil gratis (Frankfurt-Umweg 73,80 €)', () => {
+test('Sparpreis-Typ: City-Ticket macht ersten Teil gratis (Frankfurt-Umweg 73,98 €)', () => {
   const r = computeQuote({ ...SAT, ticketType: 'sp', people: P2 });
   const c = opt(r, 'sp_frankfurt_detour');
   // 2×21,90 SP + 0 (City-Ticket) + 20,00 VGN+RMV + 10,00 RMV
-  assert.equal(c.total, 73.8);
+  assert.equal(c.total, 73.98);
   assert.equal(c.rows.find((x) => /City-Ticket im Fernfahrpreis/.test(x.label)).amount, 0);
   assert.equal(best(r).id, 'sp_frankfurt_detour');
 });
@@ -67,11 +67,49 @@ test('SuperSparpreis ausverkauft: 3-Verbund rechtsrheinisch (109,80 €) gewinnt
   assert.equal(opt(r, 'flex_koblenz').available, true);
 });
 
-test('Zu kurzfristig (10.10., 3 Tage): Sparpreis-Optionen fallen weg', () => {
+test('Kurzfristig (10.10., 3 Tage Vorlauf): Sparpreise bleiben buchbar + Hinweis zum ab-Preis', () => {
   const r = computeQuote({ ...SAT, date: '2026-10-10', people: P2 });
-  assert.equal(r.meta.ssAvailable, false);
-  assert.match(opt(r, 'sp_mainz_koblenz').reason, /14 Tage/);
-  assert.equal(best(r).id, 'nv_rechtsrheinisch');
+  // Kein harter Vorlauf-Cut: Sparpreise sind für ALLE Daten buchbar
+  assert.equal(r.meta.ssAvailable, true);
+  assert.equal(r.meta.shortLead, true);
+  for (const id of ['sp_mainz_koblenz', 'sp_mainz_direct', 'sp_frankfurt_detour']) {
+    assert.equal(opt(r, id).available, true, id);
+    assert.match(opt(r, id).notes.join('\n'), /Kurzfrist/);
+  }
+  assert.equal(best(r).id, 'sp_frankfurt_detour');
+  assert.equal(best(r).total, 73.23);
+});
+
+test('Live „empty“ (Quelle antwortete, aber kein Angebot für den Tag): Fernverkehr-Optionen fallen weg', () => {
+  const live = {
+    status: 'partial', asOf: '12:00', errors: [],
+    ss: {
+      frankfurt: { status: 'empty', asOf: '12:00', error: 'keine Angebote' },
+      mainz: {
+        status: 'ok', asOf: '12:00',
+        data: {
+          minPrice: 19.9, offerName: 'SuperSparpreis', offerDesc: '', zb: true,
+          journeys: [{ price: 19.9, offerName: 'SuperSparpreis', offerDesc: '', zb: true, totalMin: 105, depStr: '11:02', arrStr: '12:47',
+            trains: [{ from: 'Köln Hbf', to: 'Mainz Hbf', depMin: 662, arrMin: 767, train: 'ICE 318', product: 'ICE' }] }]
+        }
+      },
+      koblenz: { status: 'error', error: 'nicht erreichbar' }
+    },
+    nv: {}
+  };
+  const r = computeQuote({ ...SAT, people: P2, live });
+  // Frankfurt-Option: Live fand nichts → NICHT buchbar (statt Modell zu raten)
+  const c = opt(r, 'sp_frankfurt_detour');
+  assert.equal(c.available, false);
+  assert.match(c.reason, /Live-Preissuche.*KEIN Sparpreis-Angebot/);
+  // Mainz-Optionen: Live antwortete mit Angeboten → buchbar zum Live-Preis
+  const b = opt(r, 'sp_mainz_direct');
+  assert.equal(b.available, true);
+  // 2×19,90 (live) + 7,25 Kurzstrecke (SS) + 9,50 ZMB + 30,00 RMV
+  assert.equal(b.total, 86.55);
+  // Koblenz-Option: Live-Segment „mainz“ ok → Preis aus „koblenz“ (error) fällt auf Modell zurück
+  const a = opt(r, 'sp_mainz_koblenz');
+  assert.equal(a.available, true);
 });
 
 test('Werktags 06:00: 9-Uhr-Regel blockiert RP-Ticket-Optionen – Umwege ohne RP-Ticket bleiben', () => {
@@ -84,7 +122,7 @@ test('Werktags 06:00: 9-Uhr-Regel blockiert RP-Ticket-Optionen – Umwege ohne R
   assert.equal(opt(r, 'sp_mainz_direct').available, true);
   assert.equal(opt(r, 'sp_frankfurt_detour').available, true);
   assert.equal(best(r).id, 'sp_frankfurt_detour');
-  assert.equal(best(r).total, 73.05);
+  assert.equal(best(r).total, 73.23);
 });
 
 test('Deutschlandticket für alle + Klapprad: Nahverkehr-Option kostet 0 € zusätzlich', () => {
@@ -106,7 +144,7 @@ test('5 Erwachsene: 3-Verbund rechtsrheinisch (149,30 €) schlägt Frankfurt-Um
   const people = [34, 35, 36, 37, 38].map((age) => ({ age, bc25: 'none', bike: false, dtt: false, ownChild: true }));
   const r = computeQuote({ ...SAT, people });
   // C: 5×17,90 + 5×2,90 + 5×7,80 + 5×3,90 = 89,50 + 14,50 + 39,00 + 19,50 = 162,50
-  assert.equal(opt(r, 'sp_frankfurt_detour').total, 162.5);
+  assert.equal(opt(r, 'sp_frankfurt_detour').total, 162.95);
   // E: 59,80 NRW + 70,00 RP (5 zahlend) + 39,00 RMV (2 Waben) = 168,80
   assert.equal(opt(r, 'nv_linksrheinisch').total, 168.8);
   // G: 59,80 NRW + 70,00 RP + 19,50 RMV (1 Wabe) = 149,30 → best
@@ -121,8 +159,8 @@ test('Neue BahnCard 25 (Sparpreis): 25 % Rabatt + Kartenpreis 62,90 € (1 Pers.
     people: [{ age: 34, bc25: 'new', bike: false, dtt: false, ownChild: true }]
   });
   const b = opt(r, 'sp_mainz_koblenz');
-  // 21,90×0,75≈16,42 + 62,90 + 0 (City) + 30 RP + 7,80 RMV
-  assert.equal(b.total, 117.12);
+  // 21,99×0,75≈16,49 + 62,90 + 0 (City) + 30 RP + 7,80 RMV
+  assert.equal(b.total, 117.19);
   const rowBc = b.rows.find((x) => /BahnCard/.test(x.label));
   assert.equal(rowBc.amount, 62.9);
 });
@@ -134,8 +172,8 @@ test('Klapprad: erster + letzter Teil gratis – Mainz-direkt ohne RMV-Zusatz ge
   ];
   const r = computeQuote({ ...SAT, people });
   const b = opt(r, 'sp_mainz_direct');
-  // 2×17,90 + 0 (Rad) + 2×3,80 ZMB + 0 (Rad) = 43,40
-  assert.equal(b.total, 43.4);
+  // 2×17,99 + 0 (Rad) + 2×3,80 ZMB + 0 (Rad) = 43,58
+  assert.equal(b.total, 43.58);
   assert.equal(best(r).id, 'sp_mainz_direct');
 });
 
@@ -146,8 +184,8 @@ test('VRS-Abo: erster Teil gratis (auch ohne City-Ticket beim SuperSparpreis)', 
   ];
   const r = computeQuote({ ...SAT, vrsAbo: true, people });
   const b = opt(r, 'sp_mainz_koblenz');
-  // 1×17,90 SS + 0 (VRS-Abo + Kleinkind frei) + 30 RP (1 zahlend) + 7,80 RMV (2 Waben; Kind <6 frei)
-  assert.equal(b.total, 55.7);
+  // 1×17,99 SS + 0 (VRS-Abo + Kleinkind frei) + 30 RP (1 zahlend) + 7,80 RMV (2 Waben; Kind <6 frei)
+  assert.equal(b.total, 55.79);
   assert.equal(b.rows.find((x) => /VRS-Abonnement/.test(x.label)).amount, 0);
 });
 

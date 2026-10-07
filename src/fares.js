@@ -9,14 +9,14 @@ export const F = {
   // (Köln–Bonn–Koblenz–Mainz) und über die Neubaustrecke (Köln–Frankfurt Hbf).
   // → Sparpreise nur buchbar auf: Köln→Koblenz (links), Köln→Mainz (links), Köln→Frankfurt (SFS).
   ss: {
-    ab: 17.9, // SuperSparpreis ab-Preis 2. Kl. (April 2026: 17,90 €; Quelle bahn.de)
-    minLeadDays: 14, // Modell-Annahme: ab ~14 Tage vor Abreise verfügbar (FLAG)
+    ab: 17.99, // SuperSparpreis ab-Preis 2. Kl. (offiziell 2026: ab 17,99 €; Quelle bahn.de/dbfahrplanauskunft)
+    minLeadDays: 14, // NUR Referenzwert für Hinweis: unter ~14 Tagen Vorlauf ab-Preis i. d. R. erschwert (kein harter Cut – Sparpreise sind für alle Daten buchbar)
     bcDiscount: 0.25,
     kidsFree: 'Kinder bis 14: mitreise frei, wenn Alter bei Buchung angegeben (max. 4 je Ticket, Begleitperson 15+).',
-    note: 'SuperSparpreis: streng an den gebuchten Zug gebunden (Zugbindung), nicht stornierbar, KEIN City-Ticket. Modell-Annahme „ab 14 Tage“ ist geschätzt – live wird der reale Buchungsstatus angezeigt.'
+    note: 'SuperSparpreis: streng an den gebuchten Zug gebunden (Zugbindung), nicht stornierbar, KEIN City-Ticket. Für ALLE Reisedaten buchbar – bei kurzem Vorlauf sind die ab-Preise aber oft nicht verfügbar (Preis steigt). Live-Modus zeigt den echten Buchungsstatus.'
   },
   sp: {
-    ab: 21.9, // regulärer Sparpreis ab-Preis 2. Kl. (April 2026: 21,90 €; Quelle bahn.de)
+    ab: 21.99, // regulärer Sparpreis ab-Preis 2. Kl. (offiziell 2026: ab 21,99 €; Quelle bahn.de/dbfahrplanauskunft)
     bcDiscount: 0.25,
     kidsFree: 'Kinder bis 14: mitreise frei, wenn Alter bei Buchung angegeben (max. 4 je Ticket, Begleitperson 15+).',
     note: 'Sparpreis: an den gebuchten Zug gebunden (Zugbindung), Storno gegen Gebühr. Ab 100 km Reiseweite (Start/Ziel in teilnehmender Stadt) ist das CITY-TICKET inklusive → An-/Abfahrt mit Nahverkehr am Tag der Fahrt kostenlos (Köln nimmt teil).'
