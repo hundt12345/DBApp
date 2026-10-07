@@ -13,29 +13,31 @@ Filter:
 - **Zeitfenster / Flexibilität** (morgens / mittags / nachmittags / beliebig)
 - **Reisende** (max. 5): Alter (Tarifkategorie), eigene BC25 / neue BC25, Klapprad, Deutschlandticket, eigenes Kind
 - **VRS-Abonnement** vorhanden (Köln-Anteil gratis)
-- **Fernverkehrsticket-Typ** (SuperSparpreis ab 17,90 € **ohne** City-Ticket / Sparpreis ab 21,90 € **mit** City-Ticket >100 km)
+- **Fernverkehrsticket-Typ** (SuperSparpreis ab 17,99 € / Sparpreis ab 21,99 € – City-Ticket ist ein getrenntes Extra, hier NICHT nötig, da die S 11 im Ticket enthalten ist)
 - **Verfügbarkeits-Szenario** (ab-Preis / +10 € / +25 € / ausverkauft) – weil Fernpreise dynamisch sind
 - **Letzter Teil** (automatisch günstigste pro Person oder Fahrgastschiff KD)
 
-**Wichtiges Modell-Faktum (verifiziert):** Auf der rechten Rheinstrecke nach
-Rüdesheim/Assmannshausen fährt **kein Fernverkehr** (nur RE 97 „Rheintalbahn“ &
-RB 10) – es gibt also keinen Sparpreis „direkt“. Der Fernverkehr läuft linksrheinisch
-(Köln–Bonn–Koblenz–Mainz) und über die Neubaustrecke nach Frankfurt. Außerdem ist die
-rechte Rheinstrecke **10.07.–11.12.2026 vollgesperrt (Bau, Bus-Ersatz)** – der
-entsprechende Status wird im UI markiert. Details: [`docs/TARIFE-2026.md`](docs/TARIFE-2026.md).
+**Zwei Kern-Erkenntnisse (verifiziert):** (1) Der (Super)Sparpreis ist **DIREKT
+nach Assmannshausen buchbar** – das Ticket deckt die **gesamte gebuchte Verbindung**
+ab: Nahverkehrsvorlauf (S 11) + ICE (Zugbindung) + Nahverkehrsnachlauf (letzter
+Abschnitt, frei wählbar) → EINE Ticketzeile pro Person, keine Zusatz-RP-/RMV-Tickets
+(bahn.de-FAQ). (2) Auf der rechten Rheinstrecke nach Rüdesheim/Assmannshausen fährt
+**kein Fernverkehr** (nur RE 97 „Rheintalbahn“ & RB 10) – der Fernverkehr läuft
+linksrheinisch (Köln–Bonn–Koblenz–Mainz) und über die Neubaustrecke nach Frankfurt.
+Außerdem ist die rechte Rheinstrecke **10.07.–11.12.2026 vollgesperrt (Bau, Bus-Ersatz)**
+– der entsprechende Status wird im UI markiert. Details: [`docs/TARIFE-2026.md`](docs/TARIFE-2026.md).
 
 ## Modellierte Optionen („die Tricks“)
 
-1. **Sparpreis/SS nach Mainz, Ausstieg Koblenz** (linksrheinischer ICE, Ticket >100 km
-   buchen) + Rheinland-Pfalz-Ticket (bis Lorch) + RMV
-2. **Sparpreis/SS nach Mainz, durch bis Assmannshausen** (ZMB-Streckchen + RMV, kein RP-Ticket)
-3. **Sparpreis/SS nach Frankfurt (SFS) + RE 21 über Wiesbaden nach Rüdesheim** –
-   „längere, aber oft günstigere“ Umweg
-4. **Flexpreis nach Koblenz** (freie Zugwahl, Referenz/teuerste Variante)
-5. **3-Verbund linksrheinisch ohne Fernverkehr**: 24hTicket NRW (inkl. erster Teil!) +
+1. **Sparpreis/SS DIREKT nach Assmannshausen – linkrheinische Verbindung** (ICE via Mainz,
+   S 11 + Nachlauf im Ticket)
+2. **Sparpreis/SS DIREKT nach Assmannshausen – Umweg über Frankfurt** (SFS + RE 21
+   über Wiesbaden/Rüdesheim) – „längerer, aber oft gleich günstiger“ Umweg
+3. **Flexpreis DIREKT nach Assmannshausen** (freie Zugwahl, keine Zugbindung, Referenz)
+4. **3-Verbund linksrheinisch ohne Fernverkehr**: 24hTicket NRW (inkl. erster Teil!) +
    RP-Ticket (ab Unkel, erst. RP-Halt) + RMV
-6. **Deutschlandticket-Option** (wenn alle Reisenden ein DtT haben: 0 € zusätzlich, linksrheinisch)
-7. **RE „Rheintalbahn“ direkt rechtsrheinisch** nach Rüdesheim + RMV (in der Bauzeit: Bus)
+5. **Deutschlandticket-Option** (wenn alle Reisenden ein DtT haben: 0 € zusätzlich, linksrheinisch)
+6. **RE „Rheintalbahn“ direkt rechtsrheinisch** nach Rüdesheim + RMV (in der Bauzeit: Bus)
 
 Zu jeder Option: Gesamtpreis, Preis pro Kopf, Fahrzeit, Schritt-für-Schritt-Timeline,
 Preisaufschlüsselung pro Ticket und Anmerkungen (Gültigkeit, 9-Uhr-Regel, Kinderregeln, Rad …).
@@ -100,14 +102,19 @@ test/               Engine- + Parser-Smoke-Tests
   (ab-Preise SS 17,99 € / SP 21,99 €, +10 €, +25 €, ausverkauft). Vor der Buchung: bahn.de.
   Für kurze Vorlaufszeiten gelten die ab-Preise i. d. R. nicht mehr – der Live-Modus
   holt die echten Angebote (und meldet „kein Angebot“ ehrlich statt zu raten).
-- **City-Ticket-Logik:** beim Sparpreis/Flexpreis (>100 km) ist der erste Teil
-  Parkgürtel→Köln Hbf **enthalten**; beim SuperSparpreis gilt Köln-Kurzstrecke 2,90 €;
-  beim 3-Verbund/NRW-Ticket & DtT ist der erste Teil enthalten (nie Doppelabrechnung).
-- **Live-Modus** ersetzt ab-/Sparpreis, Fernzug-Termine und (mit DB-API-Key)
-  Nahverkehrs-Verbindungen durch echte DB-Daten – mit Fallback je Abschnitt.
-  Ohne Live-Modus gelten die markierten **Modellwerte**: Flexpreis
-  Köln→Koblenz (60 €), RMV-Wabenanzahl je Abschnitt, Fahrtzeiten
-  (typische Fahrpläne). Der Zug ist dann **nicht** verbindlich benannt.
+- **City-Ticket-Logik:** das DB-City-Ticket ist ein **getrenntes Extra** (SS: zubuchbar;
+  SP/Flex: automatisch >100 km) und hier **nicht nötig**, weil die S 11 bereits Teil der
+  gebuchten Verbindung ist – das Modell rechnet deshalb KEIN Stadt-Ticket extra ein
+  (Köln-Kurzstrecke 2,90 € nur als Referenz). Beim 3-Verbund/NRW-Ticket & DtT ist der
+  erste Teil sowieso enthalten (nie Doppelabrechnung).
+- **Live-Modus** fragt exakt die Buchungsfrage (Parkgürtel→Assmannshausen, 24-h-Fenster
+  = „Günstigster Tarif des Tages“) bei der DB-Preissuche ab und zeigt die **konkrete
+  gebuchte Verbindung mit allen Zügen** (S 11 + ICE + Nachlauf) – Route-Klassifikation
+  (via Frankfurt / linksrheinisch) weist die Angebote den Optionen zu. Zusätzlich
+  (mit DB-API-Key) echte Nahverkehrs-Verbindungen als Zugbindung-Alternativen.
+  Ohne Live-Modus gelten die markierten **Modellwerte**: Flexpreis Parkgürtel→
+  Assmannshausen (44,10 €, bahn.de-Beobachtung), RMV-Wabenanzahl je Abschnitt,
+  Fahrtzeiten (typische Fahrpläne). Der Zug ist dann **nicht** verbindlich benannt.
 - 9-Uhr-Regel, Kinderregeln, die Hessen-Pocket-Logik (RP-Ticket endet in
   Lorch/Lahnstein) und die **Vollsperrung der rechten Rheinstrecke (Bau 2026)**
   sind modelliert. Es gibt **keine harte Vorlaufzeit** – Sparpreise sind für alle

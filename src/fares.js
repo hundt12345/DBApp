@@ -28,10 +28,10 @@ export const F = {
     note: 'DB City-Ticket: einmalige Fahrt (wie Einzelfahrschein) am Geltungstag mit S-Bahn/Bahn/Bus/Tram im Verbundgebiet – z. B. Parkgürtel→Köln Hbf gratis. Im Sparpreis/Flexpreis automatisch dabei (>100 km), im SuperSparpreis NICHT.'
   },
   flex: {
-    koelnKoblenz: 60.0, // Modellwert (2. Kl., linksrheinisch) – vor Buchung auf bahn.de prüfen
+    koelnAssmannshausen: 44.1, // BEOBACHTET: bahn.de 08.10.2026, Tagesslot „Unsere Bestpreise“ (günstigste Verbindung Parkgürtel→Assmannshausen); Flexpreis in dieser Größenordnung – vor Buchung prüfen
     bcDiscount: 0.25,
     kidFactor: 0.5,
-    note: 'Flexpreis: freie Zugwahl (keine Zugbindung), stornierbar, City-Ticket inklusive (>100 km; Köln→Koblenz ist ~95 km → HIER kein City-Ticket, Modell-Annahme).'
+    note: 'Flexpreis Parkgürtel→Assmannshausen: ganze gebuchte Verbindung im Ticket (wie Sparpreis). Modellwert 44,10 € = bahn.de-Beobachtung 08.10.2026 (Tagesslot); freie Zugwahl, stornierbar.'
   },
   bc25: {
     price: { y: 39.9, a: 62.9, s: 40.9 }, // My-BahnCard (<27) / 27–64 / Senioren (65+), Jahreskarte

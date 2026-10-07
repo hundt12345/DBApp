@@ -15,27 +15,30 @@ pro Segment in `meta.live.ss/nv`).
 
 ## Live-Segmente (in `src/route.js → liveSegments`)
 
-**Fernverkehr (DB-Preissuche, je Segment 1 Call, Abfahrt Köln Hbf 8000207):**
+**Sparpreise (DB-Preissuche, NUR 1 Call – exakt die echte Buchungsfrage, 24-h-Fenster
+= „Günstigster Tarif des Tages“ wie in der bahn.de-Bestpreise-Ansicht):**
 
 | Segment | Von → Bis (Station-ID) | Option(en) |
 |---|---|---|
-| `koblenz` | Köln Hbf → Koblenz Hbf (8000206) | A (Ausstieg), D |
-| `mainz` | Köln Hbf → Mainz Hbf (8000240) | A (Buchungsziel), B |
-| `frankfurt` | Köln Hbf → Frankfurt (Main) Hbf (8098105) | C |
+| `all` | **Köln Geldernstraße/Parkgürtel (8003360) → Assmannshausen (8000635)** | A + C (via Route-Klassifikation) |
+
+Die Angebote enthalten die **ganze gebuchte Verbindung** (S 11 + Fernzug + Nachlauf)
+→ Preis p.P. + alle Züge. Die Engine klassifiziert jedes Angebot nach den Stationsnamen
+der Züge: `Frankfurt` im Verlauf → Option C (SFS + RE 21), `Mainz`/`Koblenz` → Option A
+(linksrheinisch), sonst A als Fallback. Günstigstes identifizierbares Angebot je Route
+wird genommen; wird eine Route nicht angeboten, bleibt dort der Modell-Preis.
 
 **Nahverkehr (DB Navigator API, je Segment 1 Call):**
 
 | Segment | Von → Bis (Station-ID) | Option(en) |
 |---|---|---|
-| `nv_koblenz_assmannshausen` | Koblenz (8000206) → Assmannshausen (8000635) | A, D |
-| `nv_mainz_assmannshausen` | Mainz (8000240) → Assmannshausen (8000635) | B |
-| `nv_frankfurt_assmannshausen` | Frankfurt (8098105) → Assmannshausen (8000635) | C |
-| `nv_koln_ruedesheim` | Köln Hbf (8000207) → Rüdesheim (Rhein) (8005213) | G (Stück 1) |
+| `nv_koln_assmannshausen_all` | Parkgürtel (8003360) → Assmannshausen (8000635) | E, F (Dauer) + **Zugbindung-Transparenz** (NV-Alternative für A–D) |
+| `nv_koln_ruedesheim` | Parkgürtel (8003360) → Rüdesheim (Rhein) (8005213) | G (Stück 1) |
 | `nv_ruedesheim_assmannshausen` | Rüdesheim (8005213) → Assmannshausen (8000635) | G (Stück 2) |
-| `nv_koln_assmannshausen_all` | Köln Hbf (8000207) → Assmannshausen (8000635) | E, F + **Zugbindung-Transparenz** (NV-Alternative für A–D) |
 
-Wichtig: Es gibt **kein** Preissuche-Segment „Köln→Rüdesheim“ – dort fährt kein Fernverkehr
-(→ `docs/TARIFE-2026.md`, Kern-Erkenntnis).
+Wichtig: Es gibt **kein** Preissuche-Zielsegment „Rüdesheim/Bingen/Koblenz/Mainz“ – der
+Sparpreis gilt **bis Assmannshausen**, und der Fernzug-Abschnitt ist im Live-Angebot
+enthalten (→ `docs/TARIFE-2026.md`, KERN-REGEL).
 
 ## Endpunkte
 
@@ -43,21 +46,25 @@ Wichtig: Es gibt **kein** Preissuche-Segment „Köln→Rüdesheim“ – dort f
 ```
 GET https://ps.bahn.de/preissuche/preissuche/psc_service.go
   ?lang=de&service=pscangebotsuche
-  &data={"s":"8000207","d":"8000240","dt":"24.10.26","t":"11:00","c":2,
+  &data={"s":"8003360","d":"8000635","dt":"24.10.26","t":"11:00","c":2,
          "ohneICE":false,"tct":0,"dur":1440,
          "travellers":[{"bc":0,"typ":"E","alter":30}],
          "sv":true,"v":"16040000","dir":"1","bic":false,"device":"HANDY","os":"iOS_9.3.1"}
 ```
-(d = 8000240 Mainz / 8000206 Koblenz / 8098105 Frankfurt je Segment)
+(= die genaue bahn.de-Buchungsfrage: Parkgürtel→Assmannshausen, `dur:1440` = 24-h-Fenster)
 
-Antwort (vereinfacht):
+Antwort (vereinfacht, echte Verbindung mit Vor- & Nachlauf):
 ```json
 {
   "peTexte":      { "n1": { "name": "SuperSparpreis", "hinweis": "nur gültig am 24.10." } },
-  "angebote":     { "o1": { "tt": "SP", "p": "24,90", "sids": ["j1"], "zb": "Y", "pky": "n1" } },
+  "angebote":     { "o1": { "tt": "SP", "p": "21,69", "sids": ["j1"], "zb": "Y", "pky": "n1" } },
   "verbindungen": { "j1": { "sid": "j1", "trains": [
-      { "s": "8000207", "sn": "Köln Hbf", "dep": "11:02", "d": "8000240",
-        "dn": "Mainz Hbf", "arr": "13:17", "tn": "ICE 318", "eg": "ICE" } ] } }
+      { "s": "8003360", "sn": "Köln Parkgürtel", "dep": "10:18", "d": "8000207",
+        "dn": "Köln Hbf", "arr": "10:28", "tn": "S 11", "eg": "S-Bahn" },
+      { "s": "8000207", "sn": "Köln Hbf", "dep": "10:40", "d": "8000240",
+        "dn": "Mainz Hbf", "arr": "12:05", "tn": "ICE 318", "eg": "ICE" },
+      { "s": "8000240", "sn": "Mainz Hbf", "dep": "12:25", "d": "8000635",
+        "dn": "Assmannshausen", "arr": "12:41", "tn": "RE 7008", "eg": "regional" } ] } }
 }
 ```
 - `angebote[].p` = Preis pro Erwachsenem (1. Reisender), `zb` = Zugbindung, `sids` verweist auf `verbindungen`.
@@ -104,7 +111,7 @@ buchbar; `empty` ist die ehrliche Antwort „heute/für diesen Tag nicht verfüg
 ```
 POST https://api.bahn.de/api/oauth2/token      grant_type=client_credentials
 GET  https://api.bahn.de/api/v1/connections
-  ?originId=8000206&destId=8000635
+  ?originId=8003360&destId=8000635             # Parkgürtel→Assmannshausen (oder je Segment)
   &searchDateTime=2026-10-24T11:00:00&searchDuration=1440
   &maxJourneys=3&mode=1                        # mode 1 = nur Regionalverkehr
 Header: Authorization: Bearer <access_token>

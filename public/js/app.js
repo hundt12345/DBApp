@@ -150,7 +150,7 @@ async function compute() {
     });
     const data = await res.json();
     lastBestTotal = data.options.find((o) => o.available)?.total ?? null;
-    lastFlexTotal = data.options.find((o) => o.id === 'flex_koblenz')?.total ?? null;
+    lastFlexTotal = data.options.find((o) => o.id === 'flex_direct')?.total ?? null;
     renderResults(data);
     status.textContent = '';
   } catch (e) {
@@ -181,7 +181,7 @@ function rowLink(label) {
 function bookUrl() {
   const b = ROUTE_DATA && ROUTE_DATA.fares ? ROUTE_DATA.fares.bookBaseUrl : 'https://www.bahn.de/web/foe/suchen';
   const q = new URLSearchParams({
-    origin: 'Köln Hbf',
+    origin: 'Köln Geldernstraße/Parkgürtel',
     destination: 'Assmannshausen',
     date: dateDE(state.date),
     time: (ROUTE_DATA.route.departures[state.window]) || '11:00'
@@ -195,14 +195,15 @@ function liveBox(o) {
   if (!li) return '';
   let h = '<div class="live">';
   if (li.fern) {
-    h += `<div class="live-row live-fern"><strong>🚄 Fernzug (LIVE, Stand ${li.fern.asOf}):</strong> ${li.fern.train}${li.fern.product ? ' (' + li.fern.product + ')' : ''} · fährt ${li.fern.depStr} → an ${li.fern.arrStr} · ${dur(li.fern.durMin)}${li.fern.zb ? ' · mit Zugbindung (bitte diesen Zug nehmen)' : ' · ohne Zugbindung (gilt am Tag)'}</div>`;
+    const legs = (li.fern.legs || []).map((l) => `${l.train || 'Verbindung'} ${l.depStr}→${l.arrStr} (${l.from}→${l.to})`).join(' · ');
+    h += `<div class="live-row live-fern"><strong>🚄 Gebuchte Verbindung (LIVE, Stand ${li.fern.asOf}):</strong> ${li.fern.depStr}→${li.fern.arrStr} · ${dur(li.fern.durMin)} · ${li.fern.offerName || 'Sparpreis'}${li.fern.price != null ? ' ' + eur(li.fern.price) + ' p.P.' : ''} · <strong>Zugbindung nur für ${li.fern.train || 'den Fernzug'}</strong>${li.fern.zb ? '' : ' (ohne Zugbindung)'} – S 11 und der letzte Abschnitt sind frei wählbar.${legs ? `<div class="live-sub">${legs}</div>` : ''}</div>`;
     if (li.fern.alternatives && li.fern.alternatives.length) {
-      h += '<div class="live-row live-sub">Weitere günstige Fernzüge: ' + li.fern.alternatives.map((a) => `${a.train || 'Fernzug'} ${a.depStr}→${a.arrStr}${a.price != null ? ' · ' + eur(a.price) : ''}`).join(' &nbsp;·&nbsp; ') + '</div>';
+      h += '<div class="live-row live-sub">Weitere günstige Angebote: ' + li.fern.alternatives.map((a) => `${a.depStr}→${a.arrStr}${a.price != null ? ' · ' + eur(a.price) : ''}`).join(' &nbsp;·&nbsp; ') + '</div>';
     }
   }
-  if (li.nvLeg) {
-    const legs = (li.nvLeg.legs || []).map((l) => `${l.train || 'Nahverkehr'} ${l.depStr}→${l.arrStr} (${l.from}→${l.to})`).join(' · ');
-    h += `<div class="live-row live-nv"><strong>🚋 Letzter Teil im Nahverkehr (LIVE, Stand ${li.nvLeg.asOf}):</strong> ${legs} = ${dur(li.nvLeg.totalMin)} – hier gilt KEINE Zugbindung, es kann jeder passende Zug genommen werden.</div>`;
+  if (li.nvLegs && li.nvLegs.length) {
+    const legs = li.nvLegs.map((n) => (n.legs || []).map((l) => `${l.train || 'Nahverkehr'} ${l.depStr}→${l.arrStr} (${l.from}→${l.to})`).join(' · ')).join(' &nbsp;→&nbsp; ');
+    h += `<div class="live-row live-nv"><strong>🚋 Nahverkehr (LIVE, Stand ${li.nvLegs[0].asOf}):</strong> ${legs} – hier gilt KEINE Zugbindung, es kann jeder passende Zug genommen werden.</div>`;
   }
   if (li.nvAlt) {
     const d = li.nvAlt.diffMin;
