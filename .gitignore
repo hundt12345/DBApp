@@ -1,0 +1,7 @@
+# Abhängigkeiten (jsdom nur lokal für DOM-Tests, --no-save)
+node_modules/
+
+# OS-/Editor-Rückstände
+.DS_Store
+Thumbs.db
+*.log
