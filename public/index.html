@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DBApp · Günstigste Verbindung: Parkgürtel → Assmannshausen</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="logo">🚆</span>
+    <div>
+      <h1>DBApp <small>– die günstigste ÖPNV-Verbindung</small></h1>
+      <p class="route">
+        Teststrecke: <strong>Köln Geldernstraße/Parkgürtel</strong> → <strong>Assmannshausen (Rüdesheim)</strong>
+      </p>
+    </div>
+  </div>
+  <p class="disclaimer">
+    Tarifmodell 2026 · <strong>keine Live-Buchungsdaten</strong> · Fernpreise sind dynamisch (Szenario wählbar)
+  </p>
+</header>
+
+<main>
+  <section class="filters" aria-label="Filter">
+    <div class="card">
+      <h2>Reisetag</h2>
+      <label class="field">
+        <span>Datum</span>
+        <input type="date" id="f-date" value="2026-10-24">
+      </label>
+      <label class="field">
+        <span>Abfahrtsfenster (Flexibilität)</span>
+        <select id="f-window">
+          <option value="any">beliebig (Modell-Abfahrt 11:00)</option>
+          <option value="morning">morgens (Abfahrt 07:30)</option>
+          <option value="midday">mittags (Abfahrt 11:00)</option>
+          <option value="afternoon">nachmittags (Abfahrt 15:30)</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="card">
+      <h2>Reisende <small>(max. 5 – Verbundtickets)</small></h2>
+      <div id="people"></div>
+      <button id="add-person" class="btn ghost" type="button">+ Person hinzufügen</button>
+      <p class="hint">
+        Das Alter bestimmt die Tarifkategorie: 0–5 frei · 6–14 Kind · 15–26 My-BahnCard · 27–64 BahnCard 25 · 65+ Senioren-BC.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Sonderfälle & Szenarien</h2>
+      <label class="check"><input type="checkbox" id="f-vrsabo"> Jemand hat ein <strong>VRS-Abonnement</strong> (Köln-Anteil frei)</label>
+      <label class="field">
+        <span>SuperSparpreis-Verfügbarkeit (dynamischer Preis!)</span>
+        <select id="f-ss">
+          <option value="ab">buchbar – ab-Preis (17,99 €)</option>
+          <option value="plus10">buchbar – teurerer Preis (+10 €)</option>
+          <option value="plus25">buchbar – deutlich teurer (+25 €)</option>
+          <option value="ausverkauft">ausverkauft / nicht mehr buchbar</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Letzter Teil ab Rüdesheim</span>
+        <select id="f-lastleg">
+          <option value="auto">automatisch (günstigste pro Person: Rad &gt; DtT &gt; Zug)</option>
+          <option value="kd">Fahrgastschiff KD (12,50 €, 45 min) – nur Optionen ab Rüdesheim</option>
+        </select>
+      </label>
+      <button id="calc" class="btn primary" type="button">Verbindung berechnen</button>
+      <p class="hint" id="status"></p>
+    </div>
+  </section>
+
+  <section class="results" id="results" aria-live="polite">
+    <p class="hint">Bitte berechnen …</p>
+  </section>
+</main>
+
+<footer>
+  <details class="card">
+    <summary>Annahmen, Preise &amp; Quellen (Tarifstand 10/2026)</summary>
+    <div id="assumptions" class="assumptions"></div>
+  </details>
+  <p class="legal">
+    Demo/Testphase – Preise aus veröffentlichten Tarifen 2026 modelliert (Modellwerte sind markiert).
+    Vor der Buchung bitte auf bahn.de bzw. beim zuständigen Verbund prüfen.
+  </p>
+</footer>
+
+<script src="js/app.js"></script>
+</body>
+</html>
