@@ -28,12 +28,13 @@
   // CORS-Proxy-Chain (nur öffentliche, keylose Proxys). `post`: ob der Proxy
   // POST/Body weiterleitet (corsproxy.io ja, allorigins nur GET).
   // CORS-Chain: zuerst direkt (funktioniert ohne Browser, z. B. mit CORS-Erweiterung),
-  // danach 4 öffentliche CORS-Proxys PARALLEL – der erste erfolgreiche Call gewinnt.
+  // danach 5 öffentliche CORS-Proxys PARALLEL – der erste erfolgreiche Call gewinnt.
   const PROXIES = [
     { name: 'direkt', get: (u) => u, post: false },
     { name: 'corsproxy.io', get: (u) => 'https://corsproxy.io/?url=' + encodeURIComponent(u), post: true },
     { name: 'allorigins.win', get: (u) => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u), post: false },
     { name: 'codetabs.com', get: (u) => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u), post: false },
+    { name: 'corsproxy.org', get: (u) => 'https://corsproxy.org/?url=' + encodeURIComponent(u), post: false },
     { name: 'isomorphic-git', get: (u) => 'https://cors.isomorphic-git.org/' + u, post: false }
   ];
 
@@ -51,7 +52,13 @@
     try {
       const res = await fetch(url, Object.assign({ signal: ctl.signal }, opts || {}));
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      return await res.json();
+      // Robust-JSON: manche Proxys antworten mit text/html (Fehlerseite) statt JSON
+      const text = await res.text();
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        throw new Error('Antwort ist kein JSON (Content-Type: ' + ((res.headers.get('content-type') || 'unbekannt').slice(0, 40)) + ')');
+      }
     } finally {
       clearTimeout(t);
     }

@@ -122,8 +122,31 @@ async function fetchLive() {
     return null;
   }
   if (live.status === 'live') liveStatus(`✔ LIVE-DATEN (Stand ${live.asOf}${viaTxt}): echte DB-Sparpreis-Angebote & Verbindungen.`, 'ok');
-  else if (live.status === 'partial') liveStatus(`⚠ TEILWEISE LIVE (Stand ${live.asOf}${viaTxt}): ${(live.errors || []).slice(0, 2).join(' · ')} – fehlende Abschnitte als Modell.`, 'warn');
-  else liveStatus('✖ LIVE NICHT ERREICHBAR (direkt + CORS-Proxys): ' + ((live.errors || []).slice(0, 1).join(' · ') || 'unbekannter Fehler') + ' – Modell-Preise angezeigt. Tipp: Seite neu laden / später erneut versuchen.', 'err');
+  else if (live.status === 'partial') {
+    liveStatus(`⚠ TEILWEISE LIVE (Stand ${live.asOf}${viaTxt}): ${(live.errors || []).slice(0, 2).join(' · ')} – fehlende Abschnitte als Modell.`, 'warn');
+  } else {
+    // Detailansicht: welche der 6 Quellen (direkt + 5 Proxys) ist wie fehlgeschlagen?
+    const el = $('#live-status');
+    const first = (live.errors || [])[0] || 'unbekannter Fehler';
+    el.textContent = '✖ LIVE NICHT ERREICHBAR (alle Quellen) – es gelten die Modell-Preise. ' + first;
+    el.className = 'hint live-err';
+    const det = document.createElement('details');
+    const sum = document.createElement('summary');
+    sum.textContent = 'Quellen im Detail (für Support/Debuggen aufklappen)';
+    det.appendChild(sum);
+    const srcLine = document.createElement('div');
+    srcLine.className = 'live-err-line';
+    const proxies = (window.DBAppLive && window.DBAppLive._test && window.DBAppLive._test.PROXIES) || [];
+    srcLine.textContent = 'Versucht wurden (parallel): direkt → ' + proxies.filter((p) => p.name !== 'direkt').map((p) => p.name).join(' → ');
+    det.appendChild(srcLine);
+    (live.errors || []).forEach((e) => {
+      const line = document.createElement('div');
+      line.className = 'live-err-line';
+      line.textContent = '• ' + e;
+      det.appendChild(line);
+    });
+    el.appendChild(det);
+  }
   return live;
 }
 

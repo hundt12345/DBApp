@@ -176,3 +176,6 @@ footer summary { cursor: pointer; font-weight: 600; font-size: 0.95rem; padding:
 #live-status.live-ok { color: #1a7f37; font-weight: 600; }
 #live-status.live-warn { color: #9a6700; font-weight: 600; }
 #live-status.live-err { color: #b42318; font-weight: 600; }
+#live-status details { margin-top: 6px; font-weight: 400; }
+#live-status summary { cursor: pointer; color: var(--muted); font-size: 0.78rem; }
+#live-status .live-err-line { font-size: 0.75rem; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin: 2px 0; word-break: break-word; }
