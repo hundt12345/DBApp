@@ -21,6 +21,7 @@ const state = {
   date: '2026-10-24',
   window: 'any',
   vrsAbo: false,
+  ticketType: 'ss',
   ss: 'ab',
   lastLeg: 'auto',
   liveMode: store.get('dbapp_live_mode') || 'auto',
@@ -139,6 +140,7 @@ async function compute() {
         date: state.date,
         window: state.window,
         vrsAbo: state.vrsAbo,
+        ticketType: state.ticketType,
         ssScenario: state.ss,
         lastLeg: state.lastLeg,
         people: state.people,
@@ -147,7 +149,7 @@ async function compute() {
     });
     const data = await res.json();
     lastBestTotal = data.options.find((o) => o.available)?.total ?? null;
-    lastFlexTotal = data.options.find((o) => o.id === 'flex_direct')?.total ?? null;
+    lastFlexTotal = data.options.find((o) => o.id === 'flex_koblenz')?.total ?? null;
     renderResults(data);
     status.textContent = '';
   } catch (e) {
@@ -161,7 +163,8 @@ function rowLink(label) {
   if (!l) return '';
   const s = label.toLowerCase();
   let href = null;
-  if (s.includes('sparpreis') || s.includes('flexpreis')) href = l.supersparpreis;
+  if (s.includes('city-ticket')) href = l.cityticket;
+  else if (s.includes('sparpreis') || s.includes('flexpreis')) href = s.includes('flexpreis') ? l.flexpreis : (s.includes('super') ? l.supersparpreis : l.sparpreis);
   else if (s.includes('bahncard')) href = l.bahncard;
   else if (s.includes('rheinland-pfalz')) href = l.laenderticket;
   else if (s.includes('24hticket') || s.includes('24h-ticket')) href = l.laenderticket;
@@ -221,10 +224,11 @@ function renderResults(data) {
   const liveMeta = data.meta.live
     ? ` · <strong>Live:</strong> ${data.meta.live.status === 'live' ? 'alle Abschnitte live' : data.meta.live.status === 'partial' ? 'teilweise live (Rest Modell)' : 'nicht verfügbar'} (Stand ${data.meta.live.asOf})`
     : '';
+  const bauMeta = data.meta.bau ? ' · <strong>⚠️ Bau: rechte Rheinstrecke gesperrt (Bus-Ersatz)</strong>' : '';
   head.innerHTML = `
     <strong>${data.meta.weekday}, ${data.meta.date}</strong> · Modell-Abfahrt ${data.meta.depart} ·
-    ${data.meta.people} Reisende · SuperSparpreis:
-    ${data.meta.ssAvailable ? `ab ${eur(data.meta.ssAb)}` : 'nicht verfügbar'}${liveMeta} ·
+    ${data.meta.people} Reisende · ${data.meta.fernName}:
+    ${data.meta.ssAvailable ? `ab ${eur(data.meta.ticketType === 'sp' ? data.meta.spAb : data.meta.ssAb)}` : 'nicht verfügbar'}${liveMeta}${bauMeta} ·
     Strecke: ${data.meta.origin} → ${data.meta.destination}
   `;
   box.appendChild(head);
@@ -303,6 +307,7 @@ function bind() {
   $('#f-date').addEventListener('change', (e) => { state.date = e.target.value; compute(); });
   $('#f-window').addEventListener('change', (e) => { state.window = e.target.value; compute(); });
   $('#f-vrsabo').addEventListener('change', (e) => { state.vrsAbo = e.target.checked; compute(); });
+  $('#f-ticket').addEventListener('change', (e) => { state.ticketType = e.target.value; compute(); });
   $('#f-ss').addEventListener('change', (e) => { state.ss = e.target.value; compute(); });
   $('#f-lastleg').addEventListener('change', (e) => { state.lastLeg = e.target.value; compute(); });
   $('#calc').addEventListener('click', compute);
