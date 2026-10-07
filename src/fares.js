@@ -67,5 +67,19 @@ export const F = {
   kd: {
     adult: 12.50, minutes: 45,
     note: 'Fahrgastschiff (Rössler-Linie) Rüdesheim/Bingen → Assmannshausen KD, ca. 45 min, 12,50 € (2026). Kinderrabatt modelliert mit 50 % – bitte prüfen. Nicht Nahverkehr (kein DtT/Verbundticket).'
-  }
+  },
+
+  // ---------- Links: Preistabellen der Anbieter & Buchung ----------
+  links: {
+    supersparpreis: 'https://www.bahn.de/angebot/sparpreis-flexpreis/super-sparpreis',
+    flexpreis: 'https://www.bahn.de/angebot/sparpreis-flexpreis',
+    bahncard: 'https://www.bahn.de/angebot/bahncard/vergleich',
+    laenderticket: 'https://www.bahn.de/laender-ticket',
+    rmv: 'https://www.rmv.de',
+    koeln: 'https://www.kvb.koeln/rheinlandtarif',
+    faehre: 'https://www.bingen-ruedesheimer.de/fahrpreise/',
+    kd: 'https://roesslerlinie.de/schifffahrt/planmaessige-fahrten/',
+    dtt: 'https://www.deutschlandticket.de'
+  },
+  bookBaseUrl: 'https://www.bahn.de/web/foe/suchen'
 };

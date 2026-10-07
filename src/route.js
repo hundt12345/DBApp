@@ -30,6 +30,35 @@ export const ROUTE = {
   // Modell-Abfahrten je Zeitfenster
   departures: { any: '11:00', morning: '07:30', midday: '11:00', afternoon: '15:30' },
 
+  // ---------- Live-Daten ----------
+  // Station-IDs (DB-HDS, verifiziert über das Station-Datenbestand "db-stations"):
+  stations: {
+    koelnParkguertel: '8003360', // Köln Geldernstr./Parkgürtel (S 6/S 11)
+    koelnHbf: '8000207',
+    ruedesheim: '8005213', // Rüdesheim (Rhein)
+    koblenz: '8000206', // Koblenz Hbf
+    bingen: '8000039', // Bingen (Rhein) Hbf
+    assmannshausen: '8000635',
+    ahrweiler: '8000448',
+    neuwied: '8000276',
+    euskirchen: '8000100',
+    lahnstein: '8000277' // aus ID-Folge abgeleitet (zwischen Neuwied 8000276 und Niederlahnstein 8000278)
+  },
+  // Live-Segmente: Fernpreis-Suche (ps.bahn.de) und Nahverkehr-Verbindungen (DB API)
+  liveSegments: {
+    ss: {
+      ruedesheim: { from: 'koelnHbf', to: 'ruedesheim' },
+      koblenz: { from: 'koelnHbf', to: 'koblenz' },
+      bingen: { from: 'koelnHbf', to: 'bingen' }
+    },
+    nv: {
+      nv_ruedesheim_assmannshausen: { from: 'ruedesheim', to: 'assmannshausen' },
+      nv_koblenz_assmannshausen: { from: 'koblenz', to: 'assmannshausen' },
+      nv_lahnstein_assmannshausen: { from: 'lahnstein', to: 'assmannshausen' },
+      nv_koln_assmannshausen_all: { from: 'koelnHbf', to: 'assmannshausen' }
+    }
+  },
+
   // Itinerar-Skelette (A: direkt, B: linksrheinisch, C/D: rechtsrheinisch, E: Fähre)
   // legs[i] ist ein ganzer Tarifabschnitt; letzter Leg = letzter Abschnitt bis Assmannshausen.
   itins: {

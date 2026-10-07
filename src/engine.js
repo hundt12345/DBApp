@@ -35,6 +35,21 @@ export function fmtDur(min) {
   return m === 0 ? `${h} Std.` : `${h} Std. ${m} min`;
 }
 
+// ---------- Live-Daten (ps.bahn.de Preissuche / DB-API-Verbindungen) ----------
+// live = { status, asOf, errors,
+//   ss: { segKey: { status:'ok', asOf, data:{ minPrice, offerName, offerDesc, zb, journeys:[{price, offerName, offerDesc, zb, totalMin, depStr, arrStr, trains:[{from,to,depStr,arrStr,train,product}]}] } } },
+//   nv: { nvKey: { status:'ok', asOf, data:{ journeys:[{ totalMin, depStr, arrStr, legs:[{from,to,depStr,arrStr,train,product}]}] } } } }
+function ssJ(live, key) {
+  if (!live || !live.ss) return null;
+  const s = live.ss[key];
+  return s && s.status === 'ok' && s.data && Array.isArray(s.data.journeys) && s.data.journeys.length ? s : null;
+}
+function nvJ(live, key) {
+  if (!live || !live.nv) return null;
+  const s = live.nv[key];
+  return s && s.status === 'ok' && s.data && Array.isArray(s.data.journeys) && s.data.journeys.length ? s : null;
+}
+
 function pplSummary(people) {
   const a = people.filter((p) => cat(p.age) !== 'c' && cat(p.age) !== 'u6').length;
   const c = people.filter((p) => cat(p.age) === 'c').length;
@@ -177,13 +192,42 @@ export function computeQuote(params) {
   const flSum = r2(fl.reduce((s, x) => s + x.price, 0));
   const flRow = { label: `Erster Teil: Parkgürtel→Köln Hbf (${summary})`, amount: flSum };
 
+  // ---------- Live-Daten: Preise/Fernzüge/Nahverkehr live, sonst Modell ----------
+  const live = params.live && params.live.status && params.live.status !== 'off' ? params.live : null;
+  const firstMin = anyBike ? ROUTE.firstLeg.bikeMin : ROUTE.firstLeg.s11Min;
+  const IA = ROUTE.itins.A, IB = ROUTE.itins.B, IC = ROUTE.itins.C, ID = ROUTE.itins.D, IE = ROUTE.itins.E;
+  // Fernverkehr-Dauer: live (tatsächliche Verbindung) sonst Modell
+  const fernDur = (segKey, modelMin) => {
+    const s = ssJ(live, segKey);
+    const j = s ? s.data.journeys[0] : null;
+    return j && j.totalMin != null ? j.totalMin : modelMin;
+  };
+  // Reststücke nach dem Fernzug: live (DB-Verbindungen) sonst Modell (conns+legs)
+  const restA = () => { const j = nvJ(live, 'nv_ruedesheim_assmannshausen'); return j ? j.data.journeys[0].totalMin ?? IA.conns[1] + IA.legs[1].min : IA.conns[1] + IA.legs[1].min; };
+  const restB = () => { const j = nvJ(live, 'nv_koblenz_assmannshausen'); return j ? j.data.journeys[0].totalMin ?? IB.conns[1] + IB.legs[1].min + IB.conns[2] + IB.legs[2].min : IB.conns[1] + IB.legs[1].min + IB.conns[2] + IB.legs[2].min; };
+  const restC = () => { const j = nvJ(live, 'nv_lahnstein_assmannshausen'); const last = j && j.data.journeys[0].totalMin != null ? j.data.journeys[0].totalMin : IC.legs[2].min; return IC.conns[1] + IC.legs[1].min + IC.conns[2] + last; };
+  const restE = () => { const j = nvJ(live, 'nv_ruedesheim_assmannshausen'); const last = j && j.data.journeys[0].totalMin != null ? j.data.journeys[0].totalMin : IE.legs[2].min; return IE.conns[1] + IE.legs[1].min + IE.conns[2] + last; };
+  const restD = () => { const j = nvJ(live, 'nv_koln_assmannshausen_all'); return j ? j.data.journeys[0].totalMin ?? ID.conns[0] + ID.legs[0].min + ID.conns[1] + ID.legs[1].min + ID.conns[2] + ID.legs[2].min : ID.conns[0] + ID.legs[0].min + ID.conns[1] + ID.legs[1].min + ID.conns[2] + ID.legs[2].min; };
+  const ssRowLabel = (segKey, target) => {
+    const s = ssJ(live, segKey);
+    if (s) return `${s.data.offerName || 'Sparpreis'} Köln→${target} (LIVE, ${s.asOf}, 2. Kl., ${summary})`;
+    return `SuperSparpreis Köln→${target}, 2. Kl. (${summary})`;
+  };
+  const liveFernNote = (segKey) => {
+    const s = ssJ(live, segKey);
+    if (!s) return null;
+    return `Live-Angebot (DB-Preissuche, ${s.asOf}): ${s.data.offerName || 'Sparpreis'} für ${fmtEuro(s.data.minPrice)} p.P.${s.data.offerDesc ? ' – ' + s.data.offerDesc : ''}${s.data.zb ? ' · mit Zugbindung' : ' · ohne Zugbindung'}`;
+  };
+
   const opts = [];
 
   const mk = (o) => opts.push(o);
 
   // --- 1) SuperSparpreis direkt (Itinerar A) ---
   {
-    const ss = people.map((p) => ssPerPerson(p, ssAb));
+    const liveA = ssJ(live, 'ruedesheim');
+    const abA = liveA && liveA.data.minPrice != null ? liveA.data.minPrice : ssAb;
+    const ss = people.map((p) => ssPerPerson(p, abA));
     const ll = people.map((p) => lastLeg(p, 'ruedesheim', params));
     const ticketSum = r2(ss.reduce((s, x) => s + x.ticket, 0));
     const bcSum = r2(ss.reduce((s, x) => s + x.bc, 0));
@@ -196,15 +240,16 @@ export function computeQuote(params) {
       reason: ssReason,
       badges: ['Direkt', 'letzer Teil ohne Zugbindung'],
       total: r2(ticketSum + bcSum + flSum + llSum),
-      minutes: ROUTE.duration('A'),
+      minutes: live ? firstMin + IA.conns[0] + fernDur('ruedesheim', IA.legs[0].min) + restA() : ROUTE.duration('A'),
       rows: [
-        { label: `SuperSparpreis Köln→Rüdesheim, 2. Kl. (${summary})`, amount: ticketSum },
+        { label: ssRowLabel('ruedesheim', 'Rüdesheim'), amount: ticketSum },
         ...(bcSum ? [{ label: 'Neue BahnCard 25 (12 Monate)', amount: bcSum }] : []),
         flRow,
         { label: 'Letzter Teil: Rüdesheim→Assmannshausen', amount: llSum }
       ],
       notes: [
         F.ss.note,
+        liveFernNote('ruedesheim'),
         'Trick: Ein SuperSparpreis nach einem längeren Ziel (Mainz/Mannheim) ist oft gleich teuer – einfach in Rüdesheim aussteigen.',
         'Letzter Teil (Rüdesheim→Assmannshausen) ist Nahverkehr (RMV) – keine Zugbindung, Klapprad frei.',
         hasKids ? F.ss.kidsFree : null,
@@ -215,7 +260,9 @@ export function computeQuote(params) {
 
   // --- 2) SuperSparpreis nach Bingen + Rheinfähre (Itinerar E) ---
   {
-    const ss = people.map((p) => ssPerPerson(p, ssAb));
+    const liveB = ssJ(live, 'bingen');
+    const abB = liveB && liveB.data.minPrice != null ? liveB.data.minPrice : ssAb;
+    const ss = people.map((p) => ssPerPerson(p, abB));
     const fh = people.map((p) => faehrePerPerson(p));
     const ll = people.map((p) => lastLeg(p, 'ruedesheim', params));
     const ticketSum = r2(ss.reduce((s, x) => s + x.ticket, 0));
@@ -230,9 +277,9 @@ export function computeQuote(params) {
       reason: ssReason,
       badges: ['Fähre (2,90 €)', 'keine 9-Uhr-Regel'],
       total: r2(ticketSum + bcSum + fhSum + flSum + llSum),
-      minutes: ROUTE.duration('E'),
+      minutes: live ? firstMin + IE.conns[0] + fernDur('bingen', IE.legs[0].min) + restE() : ROUTE.duration('E'),
       rows: [
-        { label: `SuperSparpreis Köln→Bingen, 2. Kl. (${summary})`, amount: ticketSum },
+        { label: ssRowLabel('bingen', 'Bingen'), amount: ticketSum },
         ...(bcSum ? [{ label: 'Neue BahnCard 25 (12 Monate)', amount: bcSum }] : []),
         flRow,
         { label: `Rheinfähre Bingen→Rüdesheim (${summary})`, amount: fhSum },
@@ -240,7 +287,8 @@ export function computeQuote(params) {
       ],
       notes: [
         'Überfahrt mit der Personenfähre ca. 6 min – umgeht den hessischen Abschnitt komplett ohne Verbundticket.',
-        'Achtung: Der reale SS-Preis nach Bingen (längere Strecke) ist oft höher als nach Rüdesheim – hier gleicher ab-Preis angesetzt.',
+        liveFernNote('bingen'),
+        liveB ? null : 'Achtung: Der reale SS-Preis nach Bingen (längere Strecke) ist oft höher als nach Rüdesheim – hier gleicher ab-Preis angesetzt.',
         'Fähre fährt planmäßig im Stundenraster (Fahrplan prüfen). Fahrrad mit: 2,70 €.',
         hasKids ? F.ss.kidsFree : null,
         bikeNote
@@ -250,7 +298,9 @@ export function computeQuote(params) {
 
   // --- 3) SuperSparpreis → Koblenz + RP-Ticket, linksrheinisch (Itinerar B) ---
   {
-    const ss = people.map((p) => ssPerPerson(p, ssAb));
+    const liveK = ssJ(live, 'koblenz');
+    const abK = liveK && liveK.data.minPrice != null ? liveK.data.minPrice : ssAb;
+    const ss = people.map((p) => ssPerPerson(p, abK));
     const rp = rpTicket(people);
     const ll = people.map((p) => lastLeg(p, 'lorch', params));
     const ticketSum = r2(ss.reduce((s, x) => s + x.ticket, 0));
@@ -264,9 +314,9 @@ export function computeQuote(params) {
       reason: ssReason || rpReason,
       badges: ['ohne Zugbindung (Nahverkehr)', '9-Uhr-Regel werktags'],
       total: r2(ticketSum + bcSum + rp.price + flSum + llSum),
-      minutes: ROUTE.duration('B'),
+      minutes: live ? firstMin + IB.conns[0] + fernDur('koblenz', IB.legs[0].min) + restB() : ROUTE.duration('B'),
       rows: [
-        { label: `SuperSparpreis Köln→Koblenz, 2. Kl. (${summary})`, amount: ticketSum },
+        { label: ssRowLabel('koblenz', 'Koblenz'), amount: ticketSum },
         ...(bcSum ? [{ label: 'Neue BahnCard 25 (12 Monate)', amount: bcSum }] : []),
         flRow,
         { label: `Rheinland-Pfalz-Ticket (Koblenz→Lorch, ${rp.payers} zahlend, Kinder <14 frei)`, amount: rp.price },
@@ -274,6 +324,7 @@ export function computeQuote(params) {
       ],
       notes: [
         'Der Sparpreis gilt nur im Fernverkehr – der Rest läuft als Nahverkehr (RE/RB) ohne Zugbindung, dafür mit eigenem Ticket.',
+        liveFernNote('koblenz'),
         'RP-Ticket endet in Lorch, weil Rüdesheim & Assmannshausen in Hessen liegen → kurzer RMV-Teil (der „kleine Teil in Hessen“).',
         'Stichwort „längere aber günstigere Strecke“: Gilt hier analog – man kann den SS auch nach Mainz buchen und in Koblenz aussteigen, wenn das billiger ist.',
         rpReason ? rpReason + ' (bei Flexibilität: einfach später abfahren.)' : null,
@@ -285,7 +336,9 @@ export function computeQuote(params) {
 
   // --- 4) SuperSparpreis → Koblenz + rechtsrheinisch (Itinerar C) ---
   {
-    const ss = people.map((p) => ssPerPerson(p, ssAb));
+    const liveK2 = ssJ(live, 'koblenz');
+    const abK2 = liveK2 && liveK2.data.minPrice != null ? liveK2.data.minPrice : ssAb;
+    const ss = people.map((p) => ssPerPerson(p, abK2));
     const rp = rpTicket(people);
     const ll = people.map((p) => lastLeg(p, 'eltville', params));
     const ticketSum = r2(ss.reduce((s, x) => s + x.ticket, 0));
@@ -299,9 +352,9 @@ export function computeQuote(params) {
       reason: ssReason || rpReason,
       badges: ['rechtsrheinisch', 'ohne Zugbindung', '9-Uhr-Regel werktags'],
       total: r2(ticketSum + bcSum + rp.price + flSum + llSum),
-      minutes: ROUTE.duration('C'),
+      minutes: live ? firstMin + IC.conns[0] + fernDur('koblenz', IC.legs[0].min) + restC() : ROUTE.duration('C'),
       rows: [
-        { label: `SuperSparpreis Köln→Koblenz, 2. Kl. (${summary})`, amount: ticketSum },
+        { label: ssRowLabel('koblenz', 'Koblenz'), amount: ticketSum },
         ...(bcSum ? [{ label: 'Neue BahnCard 25 (12 Monate)', amount: bcSum }] : []),
         flRow,
         { label: `Rheinland-Pfalz-Ticket (Koblenz→Lahnstein, ${rp.payers} zahlend, Kinder <14 frei)`, amount: rp.price },
@@ -309,6 +362,7 @@ export function computeQuote(params) {
       ],
       notes: [
         'Die rechtsrheinische Alternative: über die Lahntalstrecke nach Lahnstein, dann RB 10 (Rheingau-Bahn) rechtsrheinisch nach Assmannshausen.',
+        liveFernNote('koblenz'),
         'RP-Ticket gilt bis Lahnstein (letzter RP-Halt), ab Eltville Hessen → kurzer RMV-Teil.',
         'Keine Zugbindung im Nahverkehr; längere Fahrzeit als linksrheinisch.',
         rpReason ? rpReason + ' (bei Flexibilität: einfach später abfahren.)' : null,
@@ -332,7 +386,7 @@ export function computeQuote(params) {
       reason: rpReason,
       badges: ['ohne Fernverkehr', '3 Verbundtickets', '9-Uhr-Regel (RP-Teil) werktags'],
       total: r2(nrw.price + rp.price + flSum + llSum),
-      minutes: ROUTE.duration('D'),
+      minutes: live ? firstMin + restD() : ROUTE.duration('D'),
       rows: [
         flRow,
         { label: `24hTicket NRW (Köln→Ahrweiler, ${nrw.n} Pers., 24 h ohne 9-Uhr-Regel)`, amount: nrw.price },
@@ -351,7 +405,9 @@ export function computeQuote(params) {
   // --- 6) SuperSparpreis + Deutschlandticket (Itinerar B, nur wenn alle DtT haben) ---
   {
     if (allDtt) {
-      const ss = people.map((p) => ssPerPerson(p, ssAb));
+      const liveT = ssJ(live, 'koblenz');
+      const abT = liveT && liveT.data.minPrice != null ? liveT.data.minPrice : ssAb;
+      const ss = people.map((p) => ssPerPerson(p, abT));
       const ticketSum = r2(ss.reduce((s, x) => s + x.ticket, 0));
       const bcSum = r2(ss.reduce((s, x) => s + x.bc, 0));
       mk({
@@ -362,14 +418,15 @@ export function computeQuote(params) {
         reason: ssReason,
         badges: ['Deutschlandticket', 'keine 9-Uhr-Regel', 'ohne Zugbindung'],
         total: r2(ticketSum + bcSum),
-        minutes: ROUTE.duration('B'),
+        minutes: live ? firstMin + IB.conns[0] + fernDur('koblenz', IB.legs[0].min) + restB() : ROUTE.duration('B'),
         rows: [
-          { label: `SuperSparpreis Köln→Koblenz, 2. Kl. (${summary})`, amount: ticketSum },
+          { label: ssRowLabel('koblenz', 'Koblenz'), amount: ticketSum },
           ...(bcSum ? [{ label: 'Neue BahnCard 25 (12 Monate)', amount: bcSum }] : []),
           { label: 'Erster + letzter Teil + hessischer Abschnitt: Deutschlandticket (0 €)', amount: 0 }
         ],
         notes: [
           'Das Deutschlandticket (66,80 €/Monat, 2026) gilt im Nahverkehr ganz Deutschlands – auch in RP und im hessischen RMV-Abschnitt. Kein RP-Ticket, keine 9-Uhr-Regel.',
+          liveFernNote('koblenz'),
           'Nur modelliert, wenn alle Reisenden ein DtT haben. Fahrrad: Klapprad frei; großes Rad im Nahverkehr je nach Tarif (nicht modelliert).',
           hasKids ? F.ss.kidsFree : null
         ].filter(Boolean)
@@ -391,7 +448,7 @@ export function computeQuote(params) {
       available: true,
       badges: ['Referenz', 'ohne Vorlauf'],
       total: r2(ticketSum + bcSum + flSum + llSum),
-      minutes: ROUTE.duration('A'),
+      minutes: live ? firstMin + IA.conns[0] + fernDur('ruedesheim', IA.legs[0].min) + restA() : ROUTE.duration('A'),
       rows: [
         { label: `Flexpreis Köln→Rüdesheim, 2. Kl. (Modellwert, ${summary})`, amount: ticketSum },
         ...(bcSum ? [{ label: 'Neue BahnCard 25 (12 Monate)', amount: bcSum }] : []),
@@ -404,6 +461,70 @@ export function computeQuote(params) {
         bikeNote
       ].filter(Boolean)
     });
+  }
+
+  // ---------- Live-Info anhängen: konkreter Fernzug, Live-Nahverkehr, NV-Alternative ----------
+  const attachLive = (o, cfg) => {
+    if (!live || !o.available) return;
+    const info = {};
+    if (cfg.fern) {
+      const s = ssJ(live, cfg.fern);
+      if (s) {
+        const j = s.data.journeys[0];
+        info.fern = {
+          train: (j.trains && j.trains[0] && j.trains[0].train) || 'Fernzug',
+          product: (j.trains && j.trains[0] && j.trains[0].product) || '',
+          depStr: j.depStr,
+          arrStr: j.arrStr,
+          durMin: j.totalMin,
+          offerName: j.offerName,
+          offerDesc: j.offerDesc,
+          zb: j.zb,
+          asOf: s.asOf,
+          alternatives: s.data.journeys.slice(1, 3).map((x) => ({
+            depStr: x.depStr,
+            arrStr: x.arrStr,
+            train: (x.trains && x.trains[0] && x.trains[0].train) || '',
+            price: x.price
+          }))
+        };
+      }
+    }
+    if (cfg.nvSeg) {
+      const n = nvJ(live, cfg.nvSeg);
+      if (n) {
+        const j = n.data.journeys[0];
+        info.nvLeg = { totalMin: j.totalMin, depStr: j.depStr, arrStr: j.arrStr, legs: j.legs, asOf: n.asOf };
+      }
+    }
+    if (cfg.nvAlt) {
+      const n = nvJ(live, 'nv_koln_assmannshausen_all');
+      if (n) {
+        const j = n.data.journeys[0];
+        const tot = j.totalMin != null ? firstMin + 15 + j.totalMin : null;
+        info.nvAlt = {
+          totalMin: tot,
+          depStr: j.depStr,
+          arrStr: j.arrStr,
+          legs: j.legs,
+          asOf: n.asOf,
+          diffMin: tot != null ? tot - o.minutes : null
+        };
+      }
+    }
+    if (Object.keys(info).length) o.liveInfo = info;
+  };
+  const liveCfg = {
+    ss_direct: { fern: 'ruedesheim', nvSeg: 'nv_ruedesheim_assmannshausen', nvAlt: true },
+    faehre_bingen: { fern: 'bingen', nvSeg: 'nv_ruedesheim_assmannshausen', nvAlt: true },
+    ss_koblenz_rlp: { fern: 'koblenz', nvSeg: 'nv_koblenz_assmannshausen', nvAlt: true },
+    ss_rechtsrheinisch: { fern: 'koblenz', nvSeg: 'nv_lahnstein_assmannshausen', nvAlt: true },
+    nrw3verbund: {},
+    dtt_koblenz: { fern: 'koblenz', nvSeg: 'nv_koblenz_assmannshausen', nvAlt: true },
+    flex_direct: { fern: 'ruedesheim', nvSeg: 'nv_ruedesheim_assmannshausen', nvAlt: true }
+  };
+  for (const o of opts) {
+    if (liveCfg[o.id]) attachLive(o, liveCfg[o.id]);
   }
 
   opts.forEach((o) => {
@@ -427,6 +548,15 @@ export function computeQuote(params) {
     origin: ROUTE.origin,
     destination: ROUTE.destination
   };
+  if (live) {
+    meta.live = {
+      status: live.status,
+      asOf: live.asOf,
+      errors: live.errors || [],
+      ss: Object.keys(live.ss || {}).reduce((acc, k) => { acc[k] = (live.ss[k] || {}).status || 'missing'; return acc; }, {}),
+      nv: Object.keys(live.nv || {}).reduce((acc, k) => { acc[k] = (live.nv[k] || {}).status || 'missing'; return acc; }, {})
+    };
+  }
   return { meta, options: opts };
 }
 
@@ -444,5 +574,6 @@ export const ASSUMPTIONS = [
   { t: 'Deutschlandticket', s: '66,80 €/Monat (2026), gilt im Nahverkehr bundesweit (inkl. hessischer Abschnitt), nicht im Fernverkehr. Nur wenn alle Reisenden eines haben, wird die Kombination modelliert.' },
   { t: 'Klapprad', s: 'Gefaltetes Klapprad ist in Nah- und Fernverkehr frei ohne Reservierung. Im Modell ersetzt es den ersten Teil (~5,5 km, 25 min) und den letzten Abschnitt (entlang des Rheins) – plus 15–20 min.' },
   { t: 'Fahrzeiten', s: 'Modellwerte typischer Fahrpläne (kein Live-Daten): ICE Köln→Rüdesheim ~2 h 15 (nicht jeder ICE hält in Rüdesheim), Köln→Koblenz ~1 h 15, Umsteigepuffer 10–20 min.' },
+  { t: 'Live-Daten', s: 'Bei aktivierter Live-Ansicht ersetzt die App: Sparpreis-Ab-Preise durch reale Angebote der DB-Preissuche (ps.bahn.de, 24-h-Fenster ab gewählter Zeit – „Günstigster Tarif des Tages“), Modell-Fahrzeiten durch tatsächliche Verbindungen (DB-API). Fernzug (Name/Abfahrt) und die reine-Nahverkehr-Alternative (ohne Zugbindung) werden transparent angezeigt. Live nicht erreichbar → automatischer Rückfall auf Modell (pro Abschnitt gekennzeichnet).' },
   { t: 'Quellen (Auszug)', s: 'bahn.de (Sparpreise, BahnCard-Vergleich), db-fahrplan.com (RLP-Ticket, 24hTicket NRW), kvb.koeln (Rheinland-Tarif, eezy), mainzer-mobilitaet.de (RMV-Preise), bingen-ruedesheimer.de / roesslerlinie.de (Fähre/Fahrgastschiff 2026), t-online/ksta (KVB-Preise 2026). Details in docs/TARIFE-2026.md.' }
 ];
