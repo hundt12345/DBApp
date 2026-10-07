@@ -130,6 +130,12 @@ async function fetchLive() {
 // ---------- Berechnung ----------
 async function compute() {
   const status = $('#status');
+  // Route-Daten (Timeline, bahn.de-Deep-Link) müssen vor dem Render vorhanden sein –
+  // sonst Racing-Bug: compute() startet parallel zu loadMeta() → ROUTE_DATA null → Crash
+  if (!ROUTE_DATA) {
+    status.textContent = 'Lade Streckendaten …';
+    await Promise.race([ensureMeta(), new Promise((r) => setTimeout(r, 5000))]);
+  }
   status.textContent = state.liveMode !== 'off' ? 'Lade Live-Daten von der DB …' : 'Berechne …';
   try {
     const live = await fetchLive();
@@ -180,11 +186,12 @@ function rowLink(label) {
 
 function bookUrl() {
   const b = ROUTE_DATA && ROUTE_DATA.fares ? ROUTE_DATA.fares.bookBaseUrl : 'https://www.bahn.de/web/foe/suchen';
+  const dep = (ROUTE_DATA && ROUTE_DATA.route && ROUTE_DATA.route.departures && ROUTE_DATA.route.departures[state.window]) || '11:00';
   const q = new URLSearchParams({
     origin: 'Köln Geldernstraße/Parkgürtel',
     destination: 'Assmannshausen',
     date: dateDE(state.date),
-    time: (ROUTE_DATA.route.departures[state.window]) || '11:00'
+    time: dep
   });
   return b + '?' + q.toString();
 }
@@ -296,6 +303,11 @@ function renderResults(data) {
 }
 
 // ---------- Annahmen laden ----------
+let metaPromise = null;
+function ensureMeta() {
+  if (!metaPromise) metaPromise = loadMeta();
+  return metaPromise;
+}
 async function loadMeta() {
   try {
     const res = await fetch('/api/data');
@@ -305,6 +317,7 @@ async function loadMeta() {
       .join('');
     $('#assumptions').innerHTML = `<dl>${dl}</dl>`;
   } catch {
+    metaPromise = null; // beim nächsten Versuch erneut laden
     $('#assumptions').innerHTML = '<dd>Annahmen konnten nicht geladen werden.</dd>';
   }
 }

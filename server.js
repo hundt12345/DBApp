@@ -78,7 +78,8 @@ const server = http.createServer(async (req, res) => {
       return res.end('Forbidden');
     }
     const data = await readFile(file);
-    res.writeHead(200, { 'Content-Type': MIME[extname(file)] || 'application/octet-stream' });
+    // no-cache = Browser muss bei jedem Laden revalidieren (keine stehengebliebene alte app.js)
+    res.writeHead(200, { 'Content-Type': MIME[extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
     res.end(data);
   } catch (e) {
     console.error(`Fehler bei ${req.method} ${req.url}:`, e);
